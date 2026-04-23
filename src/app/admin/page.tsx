@@ -1,10 +1,16 @@
 import Link from 'next/link';
 import { dashboardSnapshot } from '@/app/_lib/dashboardData';
+import { listarDivergencias, resumoDivergencias } from '@/app/_lib/divergenciaData';
 import type {
   AlertaEstoqueBaixo,
   AlertaLotePendente,
   UltimoLancamento,
 } from '@/application/services/DashboardAdminService';
+import type {
+  DivergenciaLote,
+  PrioridadeDivergencia,
+  ResumoDivergencias,
+} from '@/application/services/DivergenciaService';
 import type { MovimentacaoTipo } from '@/domain/types/enums';
 import styles from './page.module.css';
 
@@ -48,25 +54,54 @@ const STATUS_LOTE_LABEL: Record<AlertaLotePendente['status'], string> = {
   com_divergencia: 'Divergência',
 };
 
+const PRIORIDADE_LABEL: Record<PrioridadeDivergencia, string> = {
+  critica: 'Crítica',
+  excesso: 'Excesso',
+  atencao: 'Atenção',
+  aguardando: 'Aguardando',
+  encerrado_baixado: 'Encerrado',
+  ok: 'Ok',
+};
+
+const PRIORIDADE_CLASS: Record<PrioridadeDivergencia, string> = {
+  critica: 'prioCritica',
+  excesso: 'prioExcesso',
+  atencao: 'prioAtencao',
+  aguardando: 'prioAguardando',
+  encerrado_baixado: 'prioEncerrado',
+  ok: 'prioOk',
+};
+
 export default async function AdminDashboard() {
-  const snap = await dashboardSnapshot();
+  const [snap, divergencias, resumoDiv] = await Promise.all([
+    dashboardSnapshot(),
+    listarDivergencias(),
+    resumoDivergencias(),
+  ]);
   const mesReferencia = fmtMesCabecalho.format(new Date(snap.inicioMes));
   const hojeFormatado = fmtDataCurta.format(new Date(snap.agora));
+
+  // Top 5 lotes ativos mais urgentes (críticas/excesso/atenção primeiro,
+  // depois aguardando). Exclui encerrados e ok.
+  const topDivergencias = divergencias
+    .filter(
+      (d) =>
+        d.prioridade === 'critica' ||
+        d.prioridade === 'excesso' ||
+        d.prioridade === 'atencao' ||
+        d.prioridade === 'aguardando',
+    )
+    .slice(0, 5);
 
   return (
     <main className={styles.main}>
       <header className={styles.header}>
-        <div className={styles.headerTop}>
-          <div>
-            <div className={styles.badge}>Painel administrativo</div>
-            <h1 className={styles.titulo}>Visão consolidada</h1>
-            <p className={styles.subtitulo}>
-              {capitalizar(mesReferencia)} · atualizado em {hojeFormatado}
-            </p>
-          </div>
-          <Link href="/" className={styles.linkOperacao}>
-            Ir para operação →
-          </Link>
+        <div>
+          <div className={styles.badge}>Painel administrativo</div>
+          <h1 className={styles.titulo}>Visão consolidada</h1>
+          <p className={styles.subtitulo}>
+            {capitalizar(mesReferencia)} · atualizado em {hojeFormatado}
+          </p>
         </div>
       </header>
 
@@ -152,14 +187,15 @@ export default async function AdminDashboard() {
 
         <article className={styles.bloco}>
           <div className={styles.blocoHeader}>
-            <h2>Alertas</h2>
-            <span className={styles.blocoHint}>
-              {snap.alertasEstoque.length + snap.alertasLotes.length} total
-            </span>
+            <h2>Alertas priorizados</h2>
+            <Link href="/admin/divergencias" className={styles.blocoLink}>
+              Ver todas as divergências →
+            </Link>
           </div>
-          <Alertas
+          <AlertasPriorizados
+            resumo={resumoDiv}
+            topDivergencias={topDivergencias}
             estoque={snap.alertasEstoque}
-            lotes={snap.alertasLotes}
             depositoNome={snap.depositoPrincipalNome}
           />
         </article>
@@ -182,6 +218,18 @@ export default async function AdminDashboard() {
                 : 'Sem lotes pendentes.'
             }
             destaque={snap.pendencia.totalLotes > 0}
+          />
+          <AtalhoCard
+            href="/admin/divergencias"
+            titulo="Divergências"
+            descricao={
+              resumoDiv.criticas + resumoDiv.excesso > 0
+                ? `${resumoDiv.criticas} crítica(s) · ${resumoDiv.atencao} atenção · ${fmtBRL.format(resumoDiv.valorPendenteTotal)}`
+                : resumoDiv.atencao + resumoDiv.aguardando > 0
+                  ? `${resumoDiv.atencao + resumoDiv.aguardando} em andamento · ${fmtBRL.format(resumoDiv.valorPendenteTotal)}`
+                  : 'Nenhuma divergência ativa.'
+            }
+            destaque={resumoDiv.criticas + resumoDiv.excesso > 0}
           />
           <AtalhoCard
             href="/admin/lavanderia"
@@ -291,44 +339,91 @@ function UltimosLancamentos({ lancamentos }: { lancamentos: readonly UltimoLanca
   );
 }
 
-function Alertas({
+function AlertasPriorizados({
+  resumo,
+  topDivergencias,
   estoque,
-  lotes,
   depositoNome,
 }: {
+  resumo: ResumoDivergencias;
+  topDivergencias: readonly DivergenciaLote[];
   estoque: readonly AlertaEstoqueBaixo[];
-  lotes: readonly AlertaLotePendente[];
   depositoNome: string | null;
 }) {
-  if (estoque.length === 0 && lotes.length === 0) {
-    return <div className={styles.vazio}>Nenhum alerta no momento.</div>;
+  const totalAtivos =
+    resumo.criticas + resumo.atencao + resumo.aguardando + resumo.excesso;
+  const semAlertas = totalAtivos === 0 && estoque.length === 0;
+
+  if (semAlertas) {
+    return <div className={styles.vazio}>Nenhum alerta ativo no momento.</div>;
   }
+
   return (
     <div className={styles.alertasWrapper}>
-      {lotes.length > 0 && (
+      {/* Cabeçalho com contagem por prioridade */}
+      {totalAtivos > 0 && (
+        <div className={styles.prioResumo}>
+          {resumo.criticas > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioCritica}`}>
+              {resumo.criticas} crítica(s)
+            </span>
+          )}
+          {resumo.excesso > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioExcesso}`}>
+              {resumo.excesso} com excesso
+            </span>
+          )}
+          {resumo.atencao > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioAtencao}`}>
+              {resumo.atencao} atenção
+            </span>
+          )}
+          {resumo.aguardando > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioAguardando}`}>
+              {resumo.aguardando} aguardando
+            </span>
+          )}
+          <span className={styles.prioValor}>
+            {fmtBRL.format(resumo.valorPendenteTotal)}
+            {resumo.custoParcial && <span className={styles.parcialMark}>*</span>}
+            <span className={styles.prioValorLabel}> em aberto</span>
+          </span>
+        </div>
+      )}
+
+      {topDivergencias.length > 0 && (
         <div>
           <div className={styles.alertaGrupoTitulo}>
-            Lotes com pendência <span className={styles.alertaContador}>{lotes.length}</span>
+            Top divergências <span className={styles.alertaContador}>{topDivergencias.length}</span>
           </div>
           <ul className={styles.alertaLista}>
-            {lotes.map((l) => (
-              <li key={l.loteId} className={styles.alertaItem}>
-                <Link href={`/admin/lotes-lavanderia/${l.loteId}`} className={styles.alertaLink}>
+            {topDivergencias.map((d) => (
+              <li key={d.lote.id} className={styles.alertaItem}>
+                <Link
+                  href={`/admin/lotes-lavanderia/${d.lote.id}`}
+                  className={styles.alertaLink}
+                >
                   <div className={styles.alertaLinhaPrincipal}>
-                    <code className={styles.codigoInline}>{l.codigo}</code>
+                    <code className={styles.codigoInline}>{d.lote.codigo}</code>
                     <span
-                      className={`${styles.statusChip} ${styles[`statusLote_${l.status}`] ?? ''}`}
+                      className={`${styles.statusChip} ${styles[PRIORIDADE_CLASS[d.prioridade]] ?? ''}`}
                     >
-                      {STATUS_LOTE_LABEL[l.status]}
+                      {PRIORIDADE_LABEL[d.prioridade]}
                     </span>
                   </div>
                   <div className={styles.alertaLinhaDetalhe}>
                     <span>
-                      <strong>{fmtNum.format(l.pendenciaEfetiva)}</strong> peça(s) pendente(s)
+                      <strong>{fmtNum.format(d.pendenciaEfetiva)}</strong> peça(s) ·
+                      {' '}
+                      {d.valorPendente > 0
+                        ? fmtBRL.format(d.valorPendente)
+                        : d.custoParcial
+                          ? 'sem preço'
+                          : 'R$ 0,00'}
                     </span>
                     <span aria-hidden> · </span>
                     <span>
-                      enviado em {fmtDataCurta.format(new Date(l.dataEnvio))} por {l.responsavel}
+                      {fmtNum.format(d.diasDesdeEnvio)} dia(s) em aberto
                     </span>
                   </div>
                 </Link>

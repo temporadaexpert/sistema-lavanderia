@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { detalheLote } from '@/app/_lib/loteData';
+import { divergenciaPorLote } from '@/app/_lib/divergenciaData';
 import { MOTIVO_LABEL } from '@/app/_lib/motivos';
 import { EncerrarLoteDialog } from '@/app/_components/EncerrarLoteDialog';
 import { LoteId } from '@/domain/types/ids';
@@ -8,6 +9,10 @@ import type {
   LoteStatus,
   MovimentacaoTipo,
 } from '@/domain/types/enums';
+import type {
+  PrioridadeDivergencia,
+  RecomendacaoAcao,
+} from '@/application/services/DivergenciaService';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -53,16 +58,75 @@ const fmtDataHora = new Intl.DateTimeFormat('pt-BR', {
   minute: '2-digit',
 });
 
+const fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const PRIORIDADE_LABEL: Record<PrioridadeDivergencia, string> = {
+  critica: 'Crítica',
+  excesso: 'Excesso',
+  atencao: 'Atenção',
+  aguardando: 'Aguardando',
+  encerrado_baixado: 'Encerrada',
+  ok: 'Ok',
+};
+
+const PRIORIDADE_DESCRICAO: Record<PrioridadeDivergencia, string> = {
+  critica: 'Lote com divergência crítica: muito tempo em aberto ou valor alto.',
+  excesso: 'Retorno excedeu o envio — provável erro de lançamento a investigar.',
+  atencao: 'Divergência começando a ficar velha. Hora de cobrar a lavanderia.',
+  aguardando: 'Pendência dentro do prazo esperado — aguardar retorno.',
+  encerrado_baixado: 'Decisão administrativa já tomada, baixa registrada.',
+  ok: 'Sem pendências.',
+};
+
+const RECOMENDACAO_LABEL: Record<RecomendacaoAcao, string> = {
+  nenhuma: '',
+  aguardar_retorno: 'Aguardar retorno',
+  cobrar_lavanderia: 'Cobrar lavanderia',
+  encerrar_com_baixa: 'Encerrar com baixa',
+  verificar_lancamento: 'Verificar lançamento',
+};
+
+const RECOMENDACAO_DETALHE: Record<RecomendacaoAcao, string> = {
+  nenhuma: '',
+  aguardar_retorno: 'Prazo de devolução ainda dentro do esperado. Nenhuma ação imediata.',
+  cobrar_lavanderia:
+    'Entre em contato com a lavanderia. Confirme a data da próxima devolução e o motivo da demora.',
+  encerrar_com_baixa:
+    'Peças não vão mais retornar. Use o botão "Encerrar lote" para registrar a baixa com motivo — o saldo da lavanderia é ajustado automaticamente.',
+  verificar_lancamento:
+    'Houve retorno maior que o envio registrado. Revise as movimentações desse lote e verifique se algum lançamento ficou duplicado ou fora do lote certo.',
+};
+
 interface PageProps {
   params: { id: string };
 }
 
 export default async function LoteDetalhe({ params }: PageProps) {
-  const detalhe = await detalheLote(LoteId(params.id));
+  const loteId = LoteId(params.id);
+  const [detalhe, divergencia] = await Promise.all([
+    detalheLote(loteId),
+    divergenciaPorLote(loteId),
+  ]);
   if (!detalhe) notFound();
 
   const { lote, status } = detalhe;
   const podeEncerrar = !detalhe.encerrado && detalhe.pendenciaEfetiva > 0;
+  const valorPendenteTotal = divergencia?.valorPendente ?? 0;
+  const mostrarPrioridade =
+    divergencia &&
+    divergencia.prioridade !== 'ok' &&
+    divergencia.prioridade !== 'encerrado_baixado';
+
+  // Valor pendente por item, para a tabela — indexa direto por itemId.
+  const valorPendentePorItem = new Map<string, { valorPendente: number | null; preco: number | null }>();
+  if (divergencia) {
+    for (const i of divergencia.itens) {
+      valorPendentePorItem.set(i.itemId, {
+        valorPendente: i.valorPendente,
+        preco: i.precoEfetivo,
+      });
+    }
+  }
 
   return (
     <main className={styles.main}>
@@ -71,21 +135,6 @@ export default async function LoteDetalhe({ params }: PageProps) {
           <Link href="/admin/lotes-lavanderia" className={styles.voltar}>
             ← Lotes
           </Link>
-          <span className={styles.badgeAdmin}>Admin</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-            <Link href="/admin" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Painel
-            </Link>
-            <Link href="/admin/materiais" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Materiais
-            </Link>
-            <Link href="/admin/locais" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Locais
-            </Link>
-            <Link href="/" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Operação
-            </Link>
-          </div>
         </div>
         <div className={styles.headerTop}>
           <div>
@@ -137,6 +186,52 @@ export default async function LoteDetalhe({ params }: PageProps) {
         </div>
       )}
 
+      {mostrarPrioridade && divergencia && (
+        <div
+          className={`${styles.prioBanner} ${styles[`prio_${divergencia.prioridade}`] ?? ''}`}
+          role="note"
+        >
+          <div className={styles.prioBannerTopo}>
+            <span className={`${styles.prioSelo} ${styles[`prioSelo_${divergencia.prioridade}`] ?? ''}`}>
+              {PRIORIDADE_LABEL[divergencia.prioridade]}
+            </span>
+            <span className={styles.prioBannerResumo}>
+              {divergencia.diasDesdeEnvio} dia(s) em aberto · {' '}
+              {divergencia.pendenciaEfetiva > 0 && (
+                <>
+                  <strong>{divergencia.pendenciaEfetiva}</strong> peça(s) pendente(s) ·{' '}
+                </>
+              )}
+              {divergencia.excessoTotal > 0 && (
+                <>
+                  <strong>+{divergencia.excessoTotal}</strong> em excesso ·{' '}
+                </>
+              )}
+              {valorPendenteTotal > 0
+                ? fmtBRL.format(valorPendenteTotal)
+                : divergencia.custoParcial
+                  ? 'valor sem preço'
+                  : fmtBRL.format(0)}
+              {divergencia.custoParcial && <span className={styles.parcialMark}>*</span>}
+            </span>
+          </div>
+          <p className={styles.prioBannerDescricao}>
+            {PRIORIDADE_DESCRICAO[divergencia.prioridade]}
+          </p>
+          {divergencia.recomendacao !== 'nenhuma' && (
+            <div className={styles.recomendacaoBox}>
+              <div className={styles.recomendacaoTitulo}>
+                <span className={styles.recomendacaoLabel}>Recomendação</span>
+                <strong>{RECOMENDACAO_LABEL[divergencia.recomendacao]}</strong>
+              </div>
+              <p className={styles.recomendacaoDetalhe}>
+                {RECOMENDACAO_DETALHE[divergencia.recomendacao]}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {!detalhe.encerrado && status !== 'concluido' && (
         <div
           className={`${styles.alertBanner} ${
@@ -176,6 +271,14 @@ export default async function LoteDetalhe({ params }: PageProps) {
           valor={`${detalhe.pendenciaEfetiva} peça(s)`}
           destaque={detalhe.pendenciaEfetiva !== 0}
         />
+        {divergencia && (
+          <Card
+            titulo="Valor estimado pendente"
+            valor={fmtBRL.format(valorPendenteTotal)}
+            destaque={valorPendenteTotal > 0}
+            parcial={divergencia.custoParcial}
+          />
+        )}
       </section>
 
       <section className={styles.secao}>
@@ -220,6 +323,7 @@ export default async function LoteDetalhe({ params }: PageProps) {
                 <th className={styles.num}>Pendência</th>
                 <th className={styles.num}>Baixado</th>
                 <th className={styles.num}>Efetiva</th>
+                <th className={styles.num}>Valor pendente</th>
                 <th>Situação</th>
               </tr>
             </thead>
@@ -267,6 +371,18 @@ export default async function LoteDetalhe({ params }: PageProps) {
                       ) : (
                         0
                       )}
+                    </td>
+                    <td className={styles.num}>
+                      {(() => {
+                        const info = valorPendentePorItem.get(linha.itemId);
+                        if (!info || linha.pendenciaEfetiva === 0) {
+                          return <span className={styles.muted}>—</span>;
+                        }
+                        if (info.valorPendente == null) {
+                          return <span className={styles.semPreco}>sem preço</span>;
+                        }
+                        return <span className={styles.alerta}>{fmtBRL.format(info.valorPendente)}</span>;
+                      })()}
                     </td>
                     <td>
                       {divergencia ? (
@@ -346,11 +462,24 @@ export default async function LoteDetalhe({ params }: PageProps) {
   );
 }
 
-function Card({ titulo, valor, destaque }: { titulo: string; valor: string; destaque?: boolean }) {
+function Card({
+  titulo,
+  valor,
+  destaque,
+  parcial,
+}: {
+  titulo: string;
+  valor: string;
+  destaque?: boolean;
+  parcial?: boolean;
+}) {
   return (
     <div className={`${styles.card} ${destaque ? styles.cardDestaque : ''}`}>
       <div className={styles.cardTitulo}>{titulo}</div>
-      <div className={styles.cardValor}>{valor}</div>
+      <div className={styles.cardValor}>
+        {valor}
+        {parcial && <span className={styles.parcialMark}>*</span>}
+      </div>
     </div>
   );
 }

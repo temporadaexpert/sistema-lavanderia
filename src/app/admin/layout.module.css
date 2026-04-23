@@ -1,0 +1,18 @@
+.shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* Em telas menores, a sidebar vira topbar horizontal: empilha vertical. */
+@media (max-width: 899px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+}
+
+.conteudo {
+  min-width: 0; /* evita overflow horizontal em tabelas largas */
+  background: var(--bg);
+}

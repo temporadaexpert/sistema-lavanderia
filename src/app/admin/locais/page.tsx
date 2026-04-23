@@ -43,29 +43,6 @@ export default async function LocaisListagem({ searchParams }: PageProps) {
   return (
     <main className={styles.main}>
       <header className={styles.header}>
-        <div className={styles.headerNav}>
-          <Link href="/admin" className={styles.voltar}>
-            ← Painel
-          </Link>
-          <span className={styles.badgeAdmin}>Admin</span>
-          <div className={styles.linksLateral}>
-            <Link href="/admin/materiais" className={styles.linkLateral}>
-              Materiais
-            </Link>
-            <Link href="/admin/lotes-lavanderia" className={styles.linkLateral}>
-              Lotes
-            </Link>
-            <Link href="/admin/lavanderia" className={styles.linkLateral}>
-              Relatório de custos
-            </Link>
-            <Link href="/admin/perdas" className={styles.linkLateral}>
-              Perdas
-            </Link>
-            <Link href="/" className={styles.linkLateral}>
-              Operação
-            </Link>
-          </div>
-        </div>
         <div className={styles.headerTop}>
           <div>
             <h1>Cadastro de Locais</h1>

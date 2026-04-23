@@ -12,14 +12,6 @@
   border-bottom: 1px solid var(--border);
 }
 
-.headerTop {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
 .badge {
   display: inline-block;
   padding: 3px 10px;
@@ -28,8 +20,9 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-radius: 10px;
-  background: #1a1d22;
-  color: #fff;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+  border: 1px solid var(--brand-soft);
   margin-bottom: 10px;
 }
 
@@ -44,25 +37,6 @@
   margin: 6px 0 0;
   color: var(--text-muted);
   font-size: 13px;
-}
-
-.linkOperacao {
-  padding: 9px 16px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: #fff;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background 120ms, border-color 120ms, color 120ms;
-}
-
-.linkOperacao:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #f6faff;
 }
 
 /* ---------- Impostômetro (bloco principal) ---------- */
@@ -83,14 +57,32 @@
 .impostometroMes,
 .impostometroHoje {
   padding: 22px 26px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f4f8ff 0%, #ffffff 70%);
-  border: 1px solid #dbe6f7;
+  border-radius: var(--radius-lg);
+  background: var(--ink);
+  color: var(--text-on-dark);
+  border: 1px solid var(--ink);
   position: relative;
   overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
-.impostometroMes::before,
+.impostometroMes::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--brand);
+}
+
+.impostometroHoje {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
 .impostometroHoje::before {
   content: '';
   position: absolute;
@@ -98,16 +90,7 @@
   left: 0;
   width: 4px;
   height: 100%;
-  background: var(--accent);
-}
-
-.impostometroHoje {
-  background: linear-gradient(135deg, #fdfdfd 0%, #f6f7f9 100%);
-  border-color: var(--border);
-}
-
-.impostometroHoje::before {
-  background: var(--text-muted);
+  background: var(--border-strong);
 }
 
 .impostometroLabel {
@@ -115,15 +98,20 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
   margin-bottom: 8px;
+}
+
+.impostometroMes .impostometroLabel {
+  color: var(--brand);
+}
+.impostometroHoje .impostometroLabel {
+  color: var(--text-muted);
 }
 
 .impostometroValor {
   font-size: 40px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--text);
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -133,7 +121,6 @@
   font-size: 28px;
   font-weight: 600;
   letter-spacing: -0.015em;
-  color: var(--text);
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -142,6 +129,12 @@
 .impostometroRodape {
   margin-top: 10px;
   font-size: 13px;
+}
+
+.impostometroMes .impostometroRodape {
+  color: var(--text-on-dark-muted);
+}
+.impostometroHoje .impostometroRodape {
   color: var(--text-muted);
 }
 
@@ -539,6 +532,82 @@
   background: #fdecea;
   color: var(--danger);
   border-color: #f5c6c0;
+}
+
+/* ---- Resumo priorizado de divergências ---- */
+
+.prioResumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--ink-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.prioBadge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.prioValor {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.prioValorLabel {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  margin-left: 4px;
+}
+
+.prioCritica {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: #f5c6c0;
+}
+
+.prioExcesso {
+  background: #fff4e0;
+  color: #7a3d00;
+  border-color: #ffcf99;
+}
+
+.prioAtencao {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: #ffe08a;
+}
+
+.prioAguardando {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: #c6d9f4;
+}
+
+.prioEncerrado {
+  background: #e7e8eb;
+  color: #4a4f57;
+  border-color: #cfd3d9;
+}
+
+.prioOk {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: #bde1cd;
 }
 
 /* ---------- Atalhos ---------- */

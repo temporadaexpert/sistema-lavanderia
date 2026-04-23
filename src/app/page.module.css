@@ -1,70 +1,70 @@
 .main {
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
   padding: 24px;
 }
 
 .header {
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
 }
 
 .headerTop {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-}
-
-.navAdmin {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
 }
 
 .linkAdmin {
-  padding: 8px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  background: #fff;
+  padding: 9px 16px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: var(--text-on-dark);
   font-size: 13px;
   font-weight: 500;
-  color: var(--text);
   text-decoration: none;
-  transition: background 120ms, border-color 120ms, color 120ms;
   white-space: nowrap;
+  transition: background 120ms, border-color 120ms;
 }
 
 .linkAdmin:hover {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: #f6faff;
+  background: var(--ink-hover);
+  border-color: var(--ink-hover);
 }
 
-.linkAdminPrimario {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
+.headerTitulo {
+  padding-top: 18px;
 }
 
-.linkAdminPrimario:hover {
-  background: var(--accent-hover);
-  border-color: var(--accent-hover);
-  color: #fff;
-}
-
-.header h1 {
-  font-size: 20px;
+.headerTitulo h1 {
+  font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  margin-top: 10px;
 }
 
-.header p {
-  margin: 4px 0 0;
+.headerTitulo p {
+  margin: 6px 0 0;
   color: var(--text-muted);
   font-size: 13px;
+  max-width: 640px;
+}
+
+.badgeOperacao {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-soft);
 }
 
 .grid {
@@ -88,52 +88,33 @@
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 20px;
+  box-shadow: var(--shadow-sm);
 }
 
-.card h2 {
-  font-size: 15px;
-  font-weight: 600;
+.cardOperacao {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
 }
 
 .cardHeader {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 
-/* Destaque visual do card principal de operação para diferenciar da área
-   de acompanhamento. Sutil: borda mais marcada. */
-.cardOperacao {
-  border-color: #d4deec;
-  box-shadow: 0 1px 2px rgba(31, 111, 235, 0.04);
-}
-
-/* Selo contextual: distingue o que é REGISTRO (ação da funcionária) do
-   que é ACOMPANHAMENTO (leitura). Prepara o terreno para, no futuro, um
-   selo "Admin" com o mesmo padrão visual. */
-.badgeOperacao,
-.badgeAcompanhamento {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 10.5px;
+.cardHeader h2 {
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border-radius: 10px;
-  line-height: 1.6;
 }
 
-.badgeOperacao {
-  background: #e7f0fd;
-  color: var(--accent);
-}
-
-.badgeAcompanhamento {
-  background: #eef0f3;
+.cardHeaderHint {
+  font-size: 12px;
   color: var(--text-muted);
 }

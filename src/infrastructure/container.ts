@@ -6,6 +6,7 @@ import { LoteLavanderiaService } from '@/application/services/LoteLavanderiaServ
 import { DashboardAdminService } from '@/application/services/DashboardAdminService';
 import { ItemService } from '@/application/services/ItemService';
 import { LocalService } from '@/application/services/LocalService';
+import { DivergenciaService } from '@/application/services/DivergenciaService';
 import { InMemoryItemRepository } from './repositories/InMemoryItemRepository';
 import { InMemoryLocalRepository } from './repositories/InMemoryLocalRepository';
 import { InMemoryMovimentacaoRepository } from './repositories/InMemoryMovimentacaoRepository';
@@ -26,6 +27,7 @@ export interface Container {
   dashboardAdmin: DashboardAdminService;
   itemService: ItemService;
   localService: LocalService;
+  divergenciaService: DivergenciaService;
 }
 
 // Composition root: instancia adapters concretos e injeta nos serviços.
@@ -80,5 +82,6 @@ export function criarContainer(): Container {
     ),
     itemService: new ItemService(itens, idGen, clock),
     localService: new LocalService(locais, idGen, clock),
+    divergenciaService: new DivergenciaService(lotes, itens, movimentacoes),
   };
 }

@@ -13,6 +13,7 @@ import { RelatorioLavanderiaService } from '@/application/services/RelatorioLava
 import { RelatorioPerdaService } from '@/application/services/RelatorioPerdaService';
 import { ItemService } from '@/application/services/ItemService';
 import { LocalService } from '@/application/services/LocalService';
+import { DivergenciaService } from '@/application/services/DivergenciaService';
 
 // Clock controlável — permite testar cenários que dependem de data sem
 // usar timers reais. set() move o tempo para qualquer ponto; tests de
@@ -74,6 +75,7 @@ export function criarContainerDeTeste(
   );
   const itemService = new ItemService(itens, idGen, clock);
   const localService = new LocalService(locais, idGen, clock);
+  const divergenciaService = new DivergenciaService(lotes, itens, movimentacoes);
 
   return {
     itens,
@@ -89,6 +91,7 @@ export function criarContainerDeTeste(
     loteLavanderia,
     itemService,
     localService,
+    divergenciaService,
   };
 }
 

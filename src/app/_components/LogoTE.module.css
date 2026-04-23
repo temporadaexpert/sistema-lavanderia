@@ -1,0 +1,87 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  user-select: none;
+}
+
+.marca {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--brand);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.15) inset;
+}
+
+.textos {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.empresa {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.produto {
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* Variantes de cor */
+.dark .empresa {
+  color: var(--text);
+}
+
+.light .empresa {
+  color: var(--text-on-dark);
+}
+.light .produto {
+  color: var(--text-on-dark-muted);
+}
+
+/* Tamanhos */
+.sm .marca {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+.sm .empresa {
+  font-size: 13px;
+}
+.sm .produto {
+  font-size: 9.5px;
+}
+
+.md .marca {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
+}
+.md .empresa {
+  font-size: 15px;
+}
+.md .produto {
+  font-size: 10.5px;
+}
+
+.lg .marca {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+  border-radius: var(--radius);
+}
+.lg .empresa {
+  font-size: 20px;
+}
+.lg .produto {
+  font-size: 11.5px;
+}

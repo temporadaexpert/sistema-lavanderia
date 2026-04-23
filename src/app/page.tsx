@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { LogoTE } from './_components/LogoTE';
 import { OperacaoForm } from './_components/OperacaoForm';
 import type { PendenciaLinha } from './_components/FormReceberLavanderia';
 import { SaldoTable } from './_components/SaldoTable';
@@ -45,32 +46,23 @@ export default async function Home() {
     <main className={styles.main}>
       <header className={styles.header}>
         <div className={styles.headerTop}>
-          <div>
-            <h1>Sistema de Lavanderia</h1>
-            <p>Contexto operacional — registro de movimentações do dia a dia.</p>
-          </div>
-          <div className={styles.navAdmin}>
-            <Link href="/admin" className={`${styles.linkAdmin} ${styles.linkAdminPrimario}`}>
-              Painel admin →
-            </Link>
-            <Link href="/admin/lotes-lavanderia" className={styles.linkAdmin}>
-              Lotes
-            </Link>
-            <Link href="/admin/lavanderia" className={styles.linkAdmin}>
-              Custos
-            </Link>
-            <Link href="/admin/perdas" className={styles.linkAdmin}>
-              Perdas
-            </Link>
-          </div>
+          <LogoTE tamanho="md" />
+          <Link href="/admin" className={styles.linkAdmin}>
+            Painel administrativo →
+          </Link>
+        </div>
+        <div className={styles.headerTitulo}>
+          <span className={styles.badgeOperacao}>Operação</span>
+          <h1>Registro do dia a dia</h1>
+          <p>Registre envios, retornos e ajustes. Saldo e histórico atualizam automaticamente.</p>
         </div>
       </header>
 
       <div className={styles.grid}>
         <section className={`${styles.card} ${styles.cardOperacao}`} aria-label="Área operacional">
           <div className={styles.cardHeader}>
-            <span className={styles.badgeOperacao}>Operação</span>
-            <h2>Registrar operação</h2>
+            <h2>Registrar</h2>
+            <span className={styles.cardHeaderHint}>Selecione uma ação e preencha os campos</span>
           </div>
           <OperacaoForm
             itens={itens}
@@ -83,16 +75,16 @@ export default async function Home() {
         <div className={styles.rightColumn} aria-label="Acompanhamento">
           <section className={styles.card}>
             <div className={styles.cardHeader}>
-              <span className={styles.badgeAcompanhamento}>Acompanhamento</span>
-              <h2>Saldo atual por item</h2>
+              <h2>Saldo no depósito</h2>
+              <span className={styles.cardHeaderHint}>Peças atualmente em estoque</span>
             </div>
             <SaldoTable itens={itens} local={deposito.local} saldos={deposito.saldos} />
           </section>
 
           <section className={styles.card}>
             <div className={styles.cardHeader}>
-              <span className={styles.badgeAcompanhamento}>Acompanhamento</span>
-              <h2>Histórico recente</h2>
+              <h2>Últimos lançamentos</h2>
+              <span className={styles.cardHeaderHint}>15 operações mais recentes</span>
             </div>
             <HistoricoTable itens={itens} locais={locais} movimentacoes={historico} />
           </section>

@@ -352,6 +352,134 @@
   font-style: italic;
 }
 
+.semPreco {
+  color: var(--danger);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.parcialMark {
+  display: inline-block;
+  margin-left: 4px;
+  color: var(--warn);
+  font-weight: 700;
+}
+
+/* ---- Banner de prioridade + recomendação ---- */
+
+.prioBanner {
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.prio_critica {
+  background: var(--danger-soft);
+  border-color: #f5c6c0;
+}
+
+.prio_excesso {
+  background: #fff4e0;
+  border-color: #ffcf99;
+}
+
+.prio_atencao {
+  background: var(--warn-soft);
+  border-color: #ffe08a;
+}
+
+.prio_aguardando {
+  background: var(--accent-soft);
+  border-color: #c6d9f4;
+}
+
+.prioBannerTopo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.prioSelo {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: #fff;
+}
+
+.prioSelo_critica {
+  background: var(--danger);
+  color: #fff;
+}
+.prioSelo_excesso {
+  background: #7a3d00;
+  color: #fff;
+}
+.prioSelo_atencao {
+  background: var(--warn);
+  color: #fff;
+}
+.prioSelo_aguardando {
+  background: var(--accent);
+  color: #fff;
+}
+
+.prioBannerResumo {
+  font-size: 13px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.prioBannerDescricao {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.recomendacaoBox {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.recomendacaoTitulo {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.recomendacaoLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.recomendacaoBox strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.recomendacaoDetalhe {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
 .vazio {
   padding: 30px;
   text-align: center;

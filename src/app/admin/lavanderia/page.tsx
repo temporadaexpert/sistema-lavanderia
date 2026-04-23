@@ -70,29 +70,6 @@ export default async function LavanderiaRelatorio({ searchParams }: PageProps) {
   return (
     <main className={styles.main}>
       <header className={styles.header}>
-        <div className={styles.headerNav}>
-          <Link href="/admin" className={styles.voltar}>
-            ← Painel
-          </Link>
-          <span className={styles.badgeAdmin}>Admin</span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
-            <Link href="/admin/materiais" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Materiais
-            </Link>
-            <Link href="/admin/locais" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Locais
-            </Link>
-            <Link href="/admin/lotes-lavanderia" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Lotes
-            </Link>
-            <Link href="/admin/perdas" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Perdas
-            </Link>
-            <Link href="/" className={styles.muted} style={{ textDecoration: 'none', fontSize: 13 }}>
-              Operação
-            </Link>
-          </div>
-        </div>
         <h1>Relatório de Lavanderia</h1>
         <p className={styles.intervalo}>
           {periodo.label} <span className={styles.muted}>· {periodo.rotuloIntervalo}</span>

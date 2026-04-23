@@ -1,14 +1,62 @@
+/* ---------------------------------------------------------------
+ * TE Lavanderia Control — design tokens
+ *
+ * Paleta inspirada em identidade corporativa Temporada Expert:
+ *   grafite (autoridade), dourado (marca), branco/cinza (respiro),
+ *   navy discreto para ações interativas.
+ *
+ * Convenção de cor por função:
+ *   --ink / --brand  → identidade (sidebar, logo, selos institucionais)
+ *   --accent         → ações primárias (links, botões submit)
+ *   --success/warn/danger → estados semânticos
+ * --------------------------------------------------------------- */
 :root {
+  /* Superfícies */
   --bg: #f6f7f9;
   --card: #ffffff;
-  --border: #e3e6eb;
-  --border-strong: #cbd1d9;
-  --text: #1a1d22;
-  --text-muted: #6b7380;
-  --accent: #1f6feb;
-  --accent-hover: #1557c0;
-  --danger: #c0392b;
-  --success: #1e824c;
+  --card-raised: #ffffff;
+
+  /* Bordas */
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  /* Tipografia */
+  --text: #111418;
+  --text-muted: #6b7280;
+  --text-subtle: #9ca3af;
+  --text-on-dark: #f5f5f5;
+  --text-on-dark-muted: #a1a6ad;
+
+  /* Identidade Temporada Expert */
+  --ink: #1a1d23;
+  --ink-hover: #2a2f38;
+  --ink-soft: #f2f3f5;
+  --brand: #b8860b;
+  --brand-hover: #8b6508;
+  --brand-soft: #fbf3dc;
+
+  /* Ações interativas */
+  --accent: #1e3a8a;
+  --accent-hover: #1e40af;
+  --accent-soft: #eaf1fd;
+
+  /* Estados semânticos */
+  --success: #166534;
+  --success-soft: #dcfce7;
+  --warn: #b45309;
+  --warn-soft: #fef3c7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+
+  /* Sombras */
+  --shadow-sm: 0 1px 2px rgba(17, 20, 24, 0.04);
+  --shadow: 0 2px 4px rgba(17, 20, 24, 0.06), 0 1px 2px rgba(17, 20, 24, 0.04);
+  --shadow-lg: 0 8px 24px rgba(17, 20, 24, 0.08);
+
+  /* Raios */
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
 }
 
 * {
@@ -33,6 +81,8 @@ h2,
 h3,
 h4 {
   margin: 0;
+  color: var(--text);
+  letter-spacing: -0.01em;
 }
 
 button,
@@ -46,4 +96,19 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+/* Links — âncora institucional (sem estar dentro de um CSS Module) */
+a {
+  color: var(--accent);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* Utilidade compartilhada: classe mais distintiva por todo o sistema, por
+   isso fica aqui. Foco elegante para inputs. */
+:where(input, select, textarea):focus-visible {
+  outline: none;
 }

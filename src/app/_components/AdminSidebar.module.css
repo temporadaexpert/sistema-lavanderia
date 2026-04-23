@@ -1,0 +1,178 @@
+/* Sidebar fixa à esquerda em desktop. Em telas menores, vira uma barra
+   horizontal scroll no topo — nav continua utilizável sem JS nem modal. */
+
+.sidebar {
+  background: var(--ink);
+  color: var(--text-on-dark);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brandLink {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 10px;
+}
+
+.grupoTitulo {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-on-dark-muted);
+  padding: 4px 12px;
+  margin-bottom: 8px;
+}
+
+.lista {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-on-dark);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: background 120ms, color 120ms;
+}
+
+.item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.itemAtivo,
+.itemAtivo:hover {
+  background: rgba(184, 134, 11, 0.14);
+  color: var(--brand);
+  box-shadow: inset 2px 0 0 var(--brand);
+}
+
+.itemLabel {
+  line-height: 1;
+}
+
+.seta {
+  color: var(--text-on-dark-muted);
+  font-size: 12px;
+}
+
+.separador {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 16px 8px;
+}
+
+.rodape {
+  padding: 14px 20px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sair {
+  width: 100%;
+  padding: 9px 12px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-on-dark);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.sair:hover {
+  border-color: var(--danger);
+  color: #ff9b92;
+  background: rgba(185, 28, 28, 0.12);
+}
+
+/* Mobile / tablet menor: barra horizontal no topo */
+@media (max-width: 899px) {
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 10px 12px;
+  }
+
+  .brand {
+    padding: 0 14px 0 4px;
+    border-bottom: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+  }
+
+  .nav {
+    display: flex;
+    flex-direction: row;
+    overflow: visible;
+    padding: 0;
+    flex: 1;
+    gap: 2px;
+  }
+
+  .grupoTitulo {
+    display: none;
+  }
+
+  .lista {
+    flex-direction: row;
+    margin: 0;
+    gap: 2px;
+  }
+
+  .item {
+    padding: 7px 12px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  .itemAtivo {
+    box-shadow: inset 0 -2px 0 var(--brand);
+  }
+
+  .seta {
+    display: none;
+  }
+
+  .separador {
+    width: 1px;
+    height: 24px;
+    margin: 0 8px;
+  }
+
+  .rodape {
+    padding: 0 4px 0 8px;
+    border-top: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .sair {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
