@@ -1,0 +1,139 @@
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.navAdmin {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.linkAdmin {
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 120ms, border-color 120ms, color 120ms;
+  white-space: nowrap;
+}
+
+.linkAdmin:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f6faff;
+}
+
+.linkAdminPrimario {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.linkAdminPrimario:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .grid {
+    grid-template-columns: minmax(420px, 5fr) minmax(380px, 4fr);
+  }
+}
+
+.rightColumn {
+  display: grid;
+  gap: 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.card h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Destaque visual do card principal de operação para diferenciar da área
+   de acompanhamento. Sutil: borda mais marcada. */
+.cardOperacao {
+  border-color: #d4deec;
+  box-shadow: 0 1px 2px rgba(31, 111, 235, 0.04);
+}
+
+/* Selo contextual: distingue o que é REGISTRO (ação da funcionária) do
+   que é ACOMPANHAMENTO (leitura). Prepara o terreno para, no futuro, um
+   selo "Admin" com o mesmo padrão visual. */
+.badgeOperacao,
+.badgeAcompanhamento {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.badgeOperacao {
+  background: #e7f0fd;
+  color: var(--accent);
+}
+
+.badgeAcompanhamento {
+  background: #eef0f3;
+  color: var(--text-muted);
+}

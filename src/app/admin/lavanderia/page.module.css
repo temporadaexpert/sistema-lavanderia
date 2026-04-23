@@ -1,0 +1,282 @@
+.main {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.headerNav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.voltar {
+  font-size: 13px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.voltar:hover {
+  text-decoration: underline;
+}
+
+.badgeAdmin {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  line-height: 1.6;
+  background: #1a1d22;
+  color: #fff;
+}
+
+.header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.intervalo {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.filtroItem {
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.filtroItem:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filtroItemAtivo,
+.filtroItemAtivo:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.cardDestaque {
+  border-color: #ffd89f;
+  background: linear-gradient(to bottom, #fffaf1, #fff);
+}
+
+.cardTitulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.cardValor {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.aviso {
+  padding: 12px 14px;
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+  border-radius: 6px;
+  color: #7a5500;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.aviso code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.secao {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.secaoHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.secaoHeader h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ordemNav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.ordemLabel {
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.ordemItem {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 12px;
+  color: var(--text);
+  text-decoration: none;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.ordemItem:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ordemItemAtivo,
+.ordemItemAtivo:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tabela th,
+.tabela td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.tabela th {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.tabela tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela tbody tr:hover {
+  background: #fafbfc;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.alerta {
+  color: #b96a00;
+  font-weight: 500;
+}
+
+.badgeSemPreco {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  background: #fdecea;
+  color: var(--danger);
+  border: 1px solid #f5c6c0;
+  border-radius: 10px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.parcialMark {
+  display: inline-block;
+  margin-left: 3px;
+  color: #b96a00;
+  font-weight: 700;
+}
+
+.vazio {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.nota {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}

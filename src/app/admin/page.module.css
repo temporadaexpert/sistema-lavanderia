@@ -1,0 +1,629 @@
+.main {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+}
+
+/* ---------- Header ---------- */
+
+.header {
+  margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: #1a1d22;
+  color: #fff;
+  margin-bottom: 10px;
+}
+
+.titulo {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.subtitulo {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.linkOperacao {
+  padding: 9px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+
+.linkOperacao:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: #f6faff;
+}
+
+/* ---------- Impostômetro (bloco principal) ---------- */
+
+.impostometro {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 780px) {
+  .impostometro {
+    grid-template-columns: 1fr;
+  }
+}
+
+.impostometroMes,
+.impostometroHoje {
+  padding: 22px 26px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4f8ff 0%, #ffffff 70%);
+  border: 1px solid #dbe6f7;
+  position: relative;
+  overflow: hidden;
+}
+
+.impostometroMes::before,
+.impostometroHoje::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--accent);
+}
+
+.impostometroHoje {
+  background: linear-gradient(135deg, #fdfdfd 0%, #f6f7f9 100%);
+  border-color: var(--border);
+}
+
+.impostometroHoje::before {
+  background: var(--text-muted);
+}
+
+.impostometroLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.impostometroValor {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.impostometroValorHoje {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.impostometroRodape {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.parcialMark {
+  display: inline-block;
+  margin-left: 4px;
+  color: #b96a00;
+  font-weight: 700;
+}
+
+/* ---------- Aviso de custo parcial ---------- */
+
+.aviso {
+  padding: 12px 14px;
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+  border-radius: 6px;
+  color: #7a5500;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.aviso code {
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+/* ---------- KPIs ---------- */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 1080px) {
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.kpi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kpiDestaque {
+  border-color: #ffd89f;
+  background: linear-gradient(180deg, #fffaf1 0%, #fff 100%);
+}
+
+.kpiTitulo {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kpiValor {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.kpiHint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ---------- Duas colunas (últimos + alertas) ---------- */
+
+.duasColunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 980px) {
+  .duasColunas {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bloco {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.blocoHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.blocoHeader h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.blocoLink {
+  font-size: 12.5px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.blocoLink:hover {
+  text-decoration: underline;
+}
+
+.blocoHint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.vazio {
+  padding: 28px 10px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ---------- Lista (últimos lançamentos) ---------- */
+
+.lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.listaItem {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.listaItem:last-child {
+  border-bottom: none;
+}
+
+.listaItemTopo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.listaItemData {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.listaItemConteudo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.qtd {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.listaItemRodape {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.codigoInline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  background: #f2f5f9;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--text);
+}
+
+.tipoChip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: #eef0f3;
+  color: #4a4f57;
+  border: 1px solid #d5d8dc;
+  white-space: nowrap;
+}
+
+.tipoEntrada {
+  background: #e8f5ee;
+  color: var(--success);
+  border-color: #bde1cd;
+}
+.tipoSaida {
+  background: #eaf1fd;
+  color: #1f4e9c;
+  border-color: #c6d9f4;
+}
+.tipoRetorno {
+  background: #f4ecff;
+  color: #603bb1;
+  border-color: #dccbf3;
+}
+.tipoEnvio {
+  background: #fff4e0;
+  color: #7a3d00;
+  border-color: #ffcf99;
+}
+.tipoRetornoLav {
+  background: #e8f3ed;
+  color: #1f7a3f;
+  border-color: #bfddc9;
+}
+.tipoAjuste {
+  background: #fdecea;
+  color: var(--danger);
+  border-color: #f5c6c0;
+}
+
+/* ---------- Alertas ---------- */
+
+.alertasWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.alertaGrupoTitulo {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alertaContador {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  text-align: center;
+  background: var(--danger);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.alertaSub {
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-muted);
+}
+
+.alertaLista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alertaItem {
+  padding: 10px 12px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: background 120ms, border-color 120ms;
+}
+
+.alertaItem:hover {
+  background: #f0f4fa;
+  border-color: var(--border-strong);
+}
+
+.alertaLink {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.alertaLinhaPrincipal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13.5px;
+  margin-bottom: 4px;
+}
+
+.alertaLinhaDetalhe {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.alertaEstoqueBadge {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #b96a00;
+  font-weight: 600;
+}
+
+.barra {
+  height: 4px;
+  background: #ffe08a;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.barraFill {
+  display: block;
+  height: 100%;
+  background: #b96a00;
+  border-radius: 2px;
+}
+
+.statusChip {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: #eef0f3;
+  color: #4a4f57;
+  border: 1px solid #d5d8dc;
+  white-space: nowrap;
+}
+
+.statusLote_aberto {
+  background: #eaf1fd;
+  color: #1f5fbd;
+  border-color: #c6d9f4;
+}
+
+.statusLote_retorno_parcial {
+  background: #fff4e0;
+  color: #a65a00;
+  border-color: #ffd89f;
+}
+
+.statusLote_com_divergencia {
+  background: #fdecea;
+  color: var(--danger);
+  border-color: #f5c6c0;
+}
+
+/* ---------- Atalhos ---------- */
+
+.atalhos {
+  margin-top: 8px;
+}
+
+.atalhosTitulo {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.atalhosGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.atalho {
+  position: relative;
+  display: block;
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 120ms, background 120ms, transform 120ms;
+}
+
+.atalho:hover {
+  border-color: var(--accent);
+  background: #f6faff;
+}
+
+.atalhoDestaque {
+  border-color: #ffd89f;
+  background: linear-gradient(180deg, #fffaf1 0%, #fff 100%);
+}
+
+.atalhoDestaque:hover {
+  border-color: #b96a00;
+  background: #fff7e8;
+}
+
+.atalhoDesabilitado {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #fafbfc;
+}
+
+.atalhoDesabilitado:hover {
+  border-color: var(--border);
+  background: #fafbfc;
+  transform: none;
+}
+
+.atalhoTitulo {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.atalhoDescricao {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.atalhoSeta {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: color 120ms, transform 120ms;
+}
+
+.atalho:hover .atalhoSeta {
+  color: var(--accent);
+  transform: translateX(2px);
+}
