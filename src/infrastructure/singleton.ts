@@ -96,11 +96,24 @@ async function bootstrap(): Promise<Container> {
   // não há nada a migrar.
   await migrarCategoriasLegacy(container);
 
-  // Seed é rodado APENAS quando não há itens persistidos — ou seja, primeira
-  // vez que o sistema roda (ou após limpeza manual do `data/*.json`). Em
-  // boots subsequentes, os itens/locais do gestor já vivem em disco e
-  // repopular sobrescreveria com dados demo. Movimentações demo também só
-  // fazem sentido junto do cadastro demo, então pulamos o bloco todo.
+  // Seed de demo: só é executado quando TODAS as condições abaixo batem:
+  //   1. NODE_ENV !== 'production'  (proteção primária — em produção, seed
+  //      jamais roda, mesmo se o banco estiver acidentalmente vazio).
+  //   2. SEED_DEMO === '1'          (opt-in explícito do dev local).
+  //   3. itensPersistidos.length === 0 (não sobrescreve dados existentes).
+  //
+  // POR QUE ISSO IMPORTA: o seed cria categorias com nomes como 'Toalha' que
+  // colidem com o índice `unique (lower(nome))` em categorias quando o banco
+  // tem dados migrados ('toalha'). Em produção (Supabase) isso resultava em
+  // unique violation no bootstrap, container.promise rejeitada, e páginas
+  // que aterrissavam naquele Lambda recebiam erro silencioso. Categórico:
+  // demo data não tem lugar em prod.
+  const seedHabilitado =
+    process.env.NODE_ENV !== 'production' && process.env.SEED_DEMO === '1';
+  if (!seedHabilitado) {
+    return container;
+  }
+
   const itensPersistidos = await container.itens.listar();
   if (itensPersistidos.length > 0) {
     return container;
