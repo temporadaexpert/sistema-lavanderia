@@ -80,6 +80,10 @@ describe('RelatorioLavanderiaService', () => {
       loteId: null,
       precoUnitarioSnapshot: null, // sem snapshot
       registradoEm: agora,
+      cancelada: false,
+      canceladoEm: null,
+      canceladoPor: null,
+      motivoCancelamento: null,
     });
     const resumo = await c.relatorioLavanderia.resumo();
     // Fallback para preço atual = 30. Custo = 300.

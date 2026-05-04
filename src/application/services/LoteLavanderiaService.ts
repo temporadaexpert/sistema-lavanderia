@@ -7,17 +7,16 @@ import {
   type LoteStatus,
   type MotivoFechamento,
 } from '@/domain/types/enums';
-import {
-  NotFoundError,
-  SaldoInsuficienteError,
-  ValidationError,
-} from '@/domain/errors/DomainErrors';
+import { NotFoundError, ValidationError } from '@/domain/errors/DomainErrors';
+import { REGRAS_DIVERGENCIA } from '@/domain/rules/divergenciaRules';
 import type { ItemRepository } from '../ports/ItemRepository';
 import type { LocalRepository } from '../ports/LocalRepository';
 import type { LoteRepository } from '../ports/LoteRepository';
 import type { MovimentacaoRepository } from '../ports/MovimentacaoRepository';
 import type { Clock, IdGenerator, MovimentacaoService } from './MovimentacaoService';
 import type { SaldoService } from './SaldoService';
+import type { DivergenciaService } from './DivergenciaService';
+import type { ContatoLavanderiaService } from './ContatoLavanderiaService';
 
 export interface LinhaLoteInput {
   readonly itemId: ItemId;
@@ -47,6 +46,28 @@ export interface EncerrarLoteInput {
   readonly motivo: MotivoFechamento;
   readonly motivoDescricao?: string | null;
   readonly responsavel: string;
+  // Confirmação explícita de que o gestor está ciente dos riscos
+  // (lote nunca cobrado, promessa vencida, valor alto, pendência antiga).
+  // Quando há risco detectado e essa flag é false/ausente, o service
+  // rejeita — protege contra baixas descuidadas.
+  readonly reconhecimentoRisco?: boolean;
+}
+
+// Análise de risco pré-encerramento. Consumido pela UI (modal) para
+// alertar o gestor antes do clique, e pelo próprio service como
+// revalidação server-side (não dá pra confiar no input do cliente).
+export interface RiscoEncerramento {
+  readonly temRisco: boolean;
+  readonly nuncaCobrado: boolean;
+  readonly promessaVencida: boolean;
+  readonly diasAtrasoPromessa: number | null;
+  readonly valorPendenteAlto: boolean;
+  readonly valorPendente: number;
+  readonly pendenciaAntiga: boolean;
+  readonly diasDesdeEnvio: number;
+  // Mensagens legíveis — usadas no aviso da UI e gravadas no
+  // motivoDescricao quando o encerramento é forçado.
+  readonly motivos: readonly string[];
 }
 
 export interface LoteItemDetalhe {
@@ -96,6 +117,10 @@ export class LoteLavanderiaService {
     private readonly saldos: SaldoService,
     private readonly idGen: IdGenerator,
     private readonly clock: Clock,
+    // Deps adicionadas para avaliação de risco no encerramento. Ambas
+    // puras (não mutam nada) — só fornecem dados para a decisão.
+    private readonly divergencias: DivergenciaService,
+    private readonly contatos: ContatoLavanderiaService,
   ) {}
 
   async criarEnvio(input: CriarLoteEnvioInput): Promise<Lote> {
@@ -131,16 +156,15 @@ export class LoteLavanderiaService {
       throw new ValidationError(`Destino do lote deve ser lavanderia (recebido: ${destino.tipo})`);
     }
 
+    // Pré-check antes de criar o lote: se alguma linha não couber no
+    // estoque disponível, rejeita sem side-effects. Usa a validação
+    // central do SaldoService (novo modelo com fallback legacy).
     for (const linha of input.itens) {
-      const saldo = await this.saldos.saldoDe(linha.itemId, input.origemId);
-      if (saldo < linha.quantidade) {
-        throw new SaldoInsuficienteError(
-          linha.itemId,
-          input.origemId,
-          saldo,
-          linha.quantidade,
-        );
-      }
+      await this.saldos.garantirEstoqueParaSaida(
+        linha.itemId,
+        input.origemId,
+        linha.quantidade,
+      );
     }
 
     const agora = this.clock.agoraISO();
@@ -214,6 +238,61 @@ export class LoteLavanderiaService {
     }
   }
 
+  // Diagnóstico pré-encerramento. Útil para a UI mostrar avisos no modal
+  // e para o próprio `encerrarComPendencia` revalidar antes de aceitar
+  // a baixa. Nenhuma mutação — puramente leitura.
+  //
+  // Critérios de risco (thresholds em REGRAS_DIVERGENCIA):
+  //   - Lote com pendência e nenhum contato registrado (nunca cobrado)
+  //   - Promessa de retorno vencida e ainda não cumprida
+  //   - Valor pendente ≥ VALOR_CRITICO_BRL
+  //   - Dias desde envio ≥ DIAS_CRITICO
+  async avaliarRiscoEncerramento(
+    loteId: LoteId,
+    agoraMs?: number,
+  ): Promise<RiscoEncerramento> {
+    const agora = agoraMs ?? new Date(this.clock.agoraISO()).getTime();
+    const divergencia = await this.divergencias.porLoteId(loteId, agora);
+    if (!divergencia) throw new NotFoundError('Lote', loteId);
+    const estatistica = await this.contatos.estatisticaLote(loteId, {
+      agoraMs: agora,
+      temPendencia: divergencia.pendenciaEfetiva > 0,
+    });
+
+    const nuncaCobrado =
+      estatistica.nuncaCobrado && divergencia.pendenciaEfetiva > 0;
+    const promessaVencida = estatistica.promessaVencida;
+    const diasAtrasoPromessa = estatistica.diasAtrasoPromessa;
+    const valorPendente = divergencia.valorPendente;
+    const valorPendenteAlto = valorPendente >= REGRAS_DIVERGENCIA.VALOR_CRITICO_BRL;
+    const diasDesdeEnvio = divergencia.diasDesdeEnvio;
+    const pendenciaAntiga = diasDesdeEnvio >= REGRAS_DIVERGENCIA.DIAS_CRITICO;
+
+    const motivos: string[] = [];
+    if (nuncaCobrado) motivos.push('lote nunca cobrado da lavanderia');
+    if (promessaVencida) {
+      motivos.push(`promessa vencida há ${diasAtrasoPromessa ?? 0} dia(s)`);
+    }
+    if (valorPendenteAlto) {
+      motivos.push(`valor pendente alto (R$ ${valorPendente.toFixed(2)})`);
+    }
+    if (pendenciaAntiga) {
+      motivos.push(`pendência aberta há ${diasDesdeEnvio} dia(s)`);
+    }
+
+    return {
+      temRisco: motivos.length > 0,
+      nuncaCobrado,
+      promessaVencida,
+      diasAtrasoPromessa,
+      valorPendenteAlto,
+      valorPendente,
+      pendenciaAntiga,
+      diasDesdeEnvio,
+      motivos,
+    };
+  }
+
   // Encerra um lote com pendência: registra UM ajuste por item pendente
   // (origem=lavanderia, destino=null) reduzindo o saldo da lavanderia,
   // e atualiza o cabeçalho do lote com data/motivo/responsável.
@@ -250,8 +329,22 @@ export class LoteLavanderiaService {
       throw new ValidationError('Lote não possui pendência efetiva a baixar');
     }
 
+    // Avaliação de risco: se há motivos fortes (nunca cobrado, promessa
+    // vencida, valor alto, pendência antiga), exige confirmação explícita
+    // do gestor. Valida no server — não confia no front.
+    const risco = await this.avaliarRiscoEncerramento(input.loteId);
+    if (risco.temRisco && !input.reconhecimentoRisco) {
+      throw new ValidationError(
+        `Encerramento exige confirmação de risco. Motivos: ${risco.motivos.join('; ')}.`,
+      );
+    }
+
     const agora = this.clock.agoraISO();
-    const descFinal = descricao || null;
+    // Enriquece a descrição quando houve ciência de risco — fica gravado
+    // no cabeçalho do lote e na observação do ajuste para auditoria.
+    const descFinal = risco.temRisco
+      ? `${descricao ? descricao + ' ' : ''}[encerrado com ciência de risco: ${risco.motivos.join('; ')}]`
+      : descricao || null;
     const observacaoAjuste = descFinal
       ? `Encerramento lote ${lote.codigo}: ${input.motivo} — ${descFinal}`
       : `Encerramento lote ${lote.codigo}: ${input.motivo}`;

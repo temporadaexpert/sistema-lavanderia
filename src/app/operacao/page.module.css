@@ -1,0 +1,606 @@
+.main {
+  min-height: calc(100vh - 70px);
+  background: var(--bg);
+  padding: 16px 16px 48px;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.dataHoje {
+  margin: 0 2px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+}
+
+/* ---------- Banner vermelho forte de divergência ---------- */
+
+.bannerAlerta {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #fee4df 0%, #fdecea 100%);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 6px 16px rgba(185, 28, 28, 0.18);
+  color: #6b1b14;
+}
+
+.bannerTopo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.bannerIcone {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.bannerTextos {
+  min-width: 0;
+}
+
+.bannerTitulo {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--danger);
+}
+
+.bannerSub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6b1b14;
+}
+
+.bannerLista {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.bannerLista li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid #f5c6c0;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.bannerNome {
+  font-weight: 600;
+  color: #6b1b14;
+}
+
+.bannerQtd {
+  font-weight: 700;
+  color: var(--danger);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+}
+
+.bannerMais {
+  justify-content: center !important;
+  font-size: 12px !important;
+  color: var(--text-muted) !important;
+  background: transparent !important;
+  border-style: dashed !important;
+}
+
+.bannerBotao {
+  display: block;
+  padding: 12px 16px;
+  background: var(--danger);
+  color: #fff;
+  text-decoration: none;
+  text-align: center;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: background 120ms, transform 80ms;
+}
+
+.bannerBotao:hover {
+  background: #9e2d20;
+}
+
+.bannerBotao:active {
+  transform: scale(0.98);
+}
+
+/* ---------- Banner de bloqueio (dia anterior em aberto) ---------- */
+
+.bannerBloqueio {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #fee4df 0%, #fdecea 100%);
+  border: 2px solid var(--danger);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 6px 16px rgba(185, 28, 28, 0.18);
+  color: #6b1b14;
+}
+
+.bannerAcoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bannerBotaoSecundario {
+  flex: 1;
+  padding: 12px 14px;
+  background: #fff;
+  color: var(--danger);
+  border: 1.5px solid var(--danger);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  min-width: 140px;
+  transition: background 120ms;
+}
+
+.bannerBotaoSecundario:hover {
+  background: var(--danger-soft);
+}
+
+/* Quando o banner de bloqueio está presente, o bannerBotao vira
+ * flex:1 pra dividir espaço com o secundário. */
+.bannerBloqueio .bannerBotao {
+  flex: 1;
+}
+
+/* ---------- CTA bloqueado ---------- */
+
+.ctaBloqueado {
+  background: #cbd1d9 !important;
+  color: #6b7280 !important;
+  cursor: not-allowed;
+  box-shadow: none !important;
+  filter: grayscale(0.3);
+  pointer-events: none;
+}
+
+.ctaBloqueado .ctaIcone {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- Status card (verde / amarelo / vermelho / neutro) ---------- */
+
+.statusCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.statusBadge {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.statusTexto {
+  min-width: 0;
+}
+
+.statusTitulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.statusSub {
+  margin: 3px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.88;
+}
+
+.estadoOk {
+  background: var(--success-soft);
+  border-color: #b8e0bb;
+  color: var(--success);
+}
+.estadoOk .statusBadge {
+  background: var(--success);
+  color: #fff;
+}
+
+.estadoAtencao {
+  background: var(--warn-soft);
+  border-color: #fadf8a;
+  color: #7a5500;
+}
+.estadoAtencao .statusBadge {
+  background: var(--warn);
+  color: #fff;
+}
+
+.estadoAlerta {
+  background: var(--danger-soft);
+  border-color: #f5a79c;
+  color: #6b1b14;
+}
+.estadoAlerta .statusBadge {
+  background: var(--danger);
+  color: #fff;
+}
+
+.estadoNeutro {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--text);
+}
+.estadoNeutro .statusBadge {
+  background: var(--ink-soft);
+  color: var(--text-muted);
+}
+
+/* ---------- Card "aguardando retorno" (neutro, não-alarme) ---------- */
+
+.cardAguardando {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardAguardandoIcone {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.cardAguardandoTexto {
+  min-width: 0;
+}
+
+.cardAguardandoTitulo {
+  margin: 0 0 2px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cardAguardandoSub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ---------- Blocos coloridos por categoria ---------- */
+
+.bloco {
+  margin-bottom: 18px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.blocoHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.blocoBadge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.blocoDica {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.blocoAcoes {
+  display: grid;
+  gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .blocoAcoes {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Controle diário (dourado/azul em destaque) */
+
+.blocoControle {
+  background: linear-gradient(135deg, #fffdf5 0%, #fff6e0 100%);
+  border-color: var(--brand);
+  border-left: 4px solid var(--brand);
+}
+.blocoControle .blocoBadge {
+  background: var(--brand);
+  color: var(--ink);
+}
+.blocoControle .blocoDica {
+  color: var(--brand-hover);
+}
+
+/* Lavanderia (roxo) */
+
+.blocoLavanderia {
+  background: #faf5ff;
+  border-color: #d9c9ff;
+}
+.blocoLavanderia .blocoBadge {
+  background: #7c3aed;
+  color: #fff;
+}
+.blocoLavanderia .blocoDica {
+  color: #5b2cba;
+}
+
+/* ---------- CTAs (controle diário) ---------- */
+
+.cta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  min-height: 72px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 120ms, box-shadow 120ms, filter 120ms;
+  touch-action: manipulation;
+}
+
+.cta:active {
+  transform: scale(0.98);
+}
+
+.cta:hover {
+  box-shadow: var(--shadow);
+  filter: brightness(1.03);
+}
+
+.ctaControleA {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ctaControleB {
+  background: var(--ink);
+  color: #fff;
+}
+
+.ctaIcone {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.ctaTextos {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ctaTitulo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ctaSub {
+  font-size: 12.5px;
+  opacity: 0.85;
+}
+
+/* ---------- Cards de ação (lavanderia/imóveis/depósito) ---------- */
+
+.acao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transition: border-color 120ms, transform 100ms, box-shadow 120ms;
+  touch-action: manipulation;
+  min-height: 66px;
+}
+
+.acao:active {
+  transform: scale(0.98);
+}
+
+.acaoIcone {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.acaoTextos {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.acaoTitulo {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acaoSub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Tom aplicado ao ícone da ação */
+
+.acaoLavanderia .acaoIcone {
+  background: #ede3ff;
+  color: #5b2cba;
+}
+.acaoLavanderia:hover {
+  border-color: #7c3aed;
+}
+
+/* ---------- Resumo do dia (idêntico ao anterior) ---------- */
+
+.resumo {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 18px;
+}
+
+.resumoTitulo {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .stats {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat {
+  padding: 10px 12px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.statLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.statValor {
+  margin-top: 2px;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.statFaltante {
+  background: var(--danger-soft);
+  border-color: #f5c6c0;
+}
+.statFaltante .statValor {
+  color: var(--danger);
+}
+
+/* ---------- Cards de saldo e histórico ---------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 18px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cardHeader h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cardHeaderHint {
+  font-size: 12px;
+  color: var(--text-muted);
+}

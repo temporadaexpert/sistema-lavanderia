@@ -29,6 +29,25 @@
   text-decoration: underline;
 }
 
+.linkRomaneio {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: var(--ink);
+  color: #fff;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  transition: background 120ms;
+}
+
+.linkRomaneio:hover {
+  background: var(--ink-hover);
+}
+
 .badgeAdmin {
   display: inline-block;
   padding: 2px 8px;
@@ -499,3 +518,203 @@
   text-decoration: none;
 }
 .dica a:hover { text-decoration: underline; }
+
+/* ---- Status da cobrança dentro do box de recomendação ---- */
+
+.cobrancaStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12.5px;
+}
+
+.cobrancaAlerta {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.cobrancaInfo {
+  color: var(--text);
+}
+
+/* ---- Seção header flex com ação à direita ---- */
+
+.secaoHeaderFlex {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.secaoHeaderFlex h2 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.secaoSub {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ---- Timeline de cobranças ---- */
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timelineItem {
+  padding: 12px 14px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--accent);
+}
+
+.timelineTopo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.timelineData {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timelineObservacao {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.timelineMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.timelinePromessa {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.timelinePromessa strong {
+  color: var(--warn);
+}
+
+.timelineProxima {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Chips coloridos por canal de contato */
+
+.tipoChip {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+}
+
+.chipWhatsapp {
+  background: #e8f5ee;
+  color: var(--success);
+  border-color: #bde1cd;
+}
+
+.chipTelefone {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: #c6d9f4;
+}
+
+.chipEmail {
+  background: #f4ecff;
+  color: #603bb1;
+  border-color: #dccbf3;
+}
+
+.chipPresencial {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: #ffe08a;
+}
+
+.chipOutro {
+  background: var(--ink-soft);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* ---- Banner de promessa vencida: máximo destaque ---- */
+
+.bannerPromessaVencida {
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  background: linear-gradient(180deg, #fff5f3 0%, #ffece9 100%);
+  border: 1px solid #e7a69f;
+  border-left: 6px solid #7d1a14;
+  border-radius: var(--radius);
+  box-shadow: 0 2px 4px rgba(125, 26, 20, 0.08);
+}
+
+.bannerVencidaTopo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.seloVencidaGrande {
+  display: inline-block;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: #7d1a14;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(125, 26, 20, 0.15);
+}
+
+.bannerVencidaResumo {
+  font-size: 13.5px;
+  color: #5c140f;
+}
+
+.bannerVencidaRecomendacao {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5c140f;
+}

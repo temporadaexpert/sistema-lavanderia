@@ -1,10 +1,13 @@
 import Link from 'next/link';
-import { listarDivergencias } from '@/app/_lib/divergenciaData';
+import {
+  listarDivergenciasComContato,
+  type DivergenciaComContato,
+} from '@/app/_lib/divergenciaData';
 import type {
-  DivergenciaLote,
   PrioridadeDivergencia,
   RecomendacaoAcao,
 } from '@/application/services/DivergenciaService';
+import type { TipoContatoLavanderia } from '@/domain/types/enums';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -43,10 +46,24 @@ const RECOMENDACAO_LABEL: Record<RecomendacaoAcao, string> = {
   verificar_lancamento: 'Verificar lançamento',
 };
 
+const TIPO_CONTATO_ABREV: Record<TipoContatoLavanderia, string> = {
+  whatsapp: 'WhatsApp',
+  telefone: 'Tel.',
+  email: 'E-mail',
+  presencial: 'Presencial',
+  outro: 'Outro',
+};
+
+function formatarPromessa(iso: string): string {
+  const ymd = iso.slice(0, 10);
+  const [ano, mes, dia] = ymd.split('-');
+  return `${dia}/${mes}/${ano?.slice(2)}`;
+}
+
 interface FiltroConfig {
   readonly key: string;
   readonly label: string;
-  readonly predicate: (d: DivergenciaLote) => boolean;
+  readonly predicate: (d: DivergenciaComContato) => boolean;
 }
 
 const FILTROS: readonly FiltroConfig[] = [
@@ -59,6 +76,11 @@ const FILTROS: readonly FiltroConfig[] = [
       d.prioridade === 'aguardando' ||
       d.prioridade === 'excesso',
   },
+  {
+    key: 'promessa_vencida',
+    label: 'Promessa vencida',
+    predicate: (d) => d.estatisticaContato.promessaVencida,
+  },
   { key: 'critica', label: 'Críticas', predicate: (d) => d.prioridade === 'critica' },
   { key: 'atencao', label: 'Atenção', predicate: (d) => d.prioridade === 'atencao' },
   {
@@ -67,6 +89,15 @@ const FILTROS: readonly FiltroConfig[] = [
     predicate: (d) => d.prioridade === 'aguardando',
   },
   { key: 'excesso', label: 'Excesso', predicate: (d) => d.prioridade === 'excesso' },
+  {
+    key: 'sem_cobranca',
+    label: 'Sem cobrança',
+    predicate: (d) =>
+      d.estatisticaContato.nuncaCobrado &&
+      (d.prioridade === 'critica' ||
+        d.prioridade === 'atencao' ||
+        d.prioridade === 'excesso'),
+  },
   {
     key: 'encerrado_baixado',
     label: 'Encerrados',
@@ -83,8 +114,20 @@ export default async function DivergenciasListagem({ searchParams }: PageProps) 
   const filtroKey = typeof searchParams.filtro === 'string' ? searchParams.filtro : 'ativos';
   const filtroAtivo = FILTROS.find((f) => f.key === filtroKey) ?? FILTROS[0]!;
 
-  const todas = await listarDivergencias();
+  const todas = await listarDivergenciasComContato();
   const lista = todas.filter(filtroAtivo.predicate);
+
+  // Conta quantas divergências ATIVAS nunca foram cobradas — KPI de alerta.
+  const ativasSemCobranca = todas.filter(
+    (d) =>
+      d.estatisticaContato.nuncaCobrado &&
+      (d.prioridade === 'critica' ||
+        d.prioridade === 'atencao' ||
+        d.prioridade === 'excesso'),
+  ).length;
+  const totalPromessasVencidas = todas.filter(
+    (d) => d.estatisticaContato.promessaVencida,
+  ).length;
 
   const totais = {
     criticas: todas.filter((d) => d.prioridade === 'critica').length,
@@ -159,6 +202,18 @@ export default async function DivergenciasListagem({ searchParams }: PageProps) 
           parcial={totais.custoParcial}
           destaque={totais.valorAtivo > 0}
         />
+        <Card
+          titulo="Sem cobrança"
+          valor={fmtNum.format(ativasSemCobranca)}
+          cor="danger"
+          destaque={ativasSemCobranca > 0}
+        />
+        <Card
+          titulo="Promessas vencidas"
+          valor={fmtNum.format(totalPromessasVencidas)}
+          cor="vencida"
+          destaque={totalPromessasVencidas > 0}
+        />
       </section>
 
       {totais.custoParcial && (
@@ -206,6 +261,7 @@ export default async function DivergenciasListagem({ searchParams }: PageProps) 
                   <th className={styles.num}>Pend.</th>
                   <th className={styles.num}>Valor pendente</th>
                   <th>Ação recomendada</th>
+                  <th>Último contato</th>
                   <th>Responsável</th>
                   <th></th>
                 </tr>
@@ -231,7 +287,7 @@ export default async function DivergenciasListagem({ searchParams }: PageProps) 
 // Cada lote vira N linhas (uma por item divergente) mais uma linha-cabeçalho.
 // Em lotes com 1 item só, fica compacto. Em lotes com 2+ itens, agrupa
 // visualmente por lote com rowSpan nas colunas compartilhadas.
-function linhasDoLote(d: DivergenciaLote) {
+function linhasDoLote(d: DivergenciaComContato) {
   const itensRelevantes = d.itens.filter(
     (i) => i.pendenciaEfetiva > 0 || i.excesso > 0,
   );
@@ -293,6 +349,35 @@ function linhasDoLote(d: DivergenciaLote) {
             <td rowSpan={rowSpan} className={styles.recomendacao}>
               {RECOMENDACAO_LABEL[d.recomendacao]}
             </td>
+            <td rowSpan={rowSpan} className={styles.colContato}>
+              {d.estatisticaContato.promessaVencida ? (
+                <div className={styles.contatoResumo}>
+                  <span className={styles.seloVencida}>
+                    VENCIDA há {d.estatisticaContato.diasAtrasoPromessa}d
+                  </span>
+                  {d.estatisticaContato.ultimo && (
+                    <span className={styles.contatoSubLinha}>
+                      último: há {d.estatisticaContato.diasDesdeUltimoContato}d ·{' '}
+                      {TIPO_CONTATO_ABREV[d.estatisticaContato.ultimo.tipo]}
+                    </span>
+                  )}
+                </div>
+              ) : d.estatisticaContato.nuncaCobrado ? (
+                <span className={styles.semContato}>nunca cobrado</span>
+              ) : (
+                <div className={styles.contatoResumo}>
+                  <span className={styles.contatoLinha}>
+                    <strong>{d.estatisticaContato.diasDesdeUltimoContato}d</strong>{' '}
+                    · {TIPO_CONTATO_ABREV[d.estatisticaContato.ultimo!.tipo]}
+                  </span>
+                  {d.estatisticaContato.promessaRetornoProxima && (
+                    <span className={styles.contatoPromessa}>
+                      promete {formatarPromessa(d.estatisticaContato.promessaRetornoProxima)}
+                    </span>
+                  )}
+                </div>
+              )}
+            </td>
             <td rowSpan={rowSpan}>{d.lote.responsavel}</td>
             <td rowSpan={rowSpan}>
               <Link
@@ -318,7 +403,7 @@ function Card({
 }: {
   titulo: string;
   valor: string;
-  cor?: 'danger' | 'warn' | 'info' | 'excesso';
+  cor?: 'danger' | 'warn' | 'info' | 'excesso' | 'vencida';
   destaque?: boolean;
   parcial?: boolean;
 }) {

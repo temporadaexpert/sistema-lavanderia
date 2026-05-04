@@ -1,0 +1,454 @@
+/*
+ * Romaneio A4 — duas vias por página, pronto para impressão preto e branco.
+ * @page define tamanho A4 com margens de 12mm; @media print esconde a
+ * barra de ações e força fundo branco para economizar tinta.
+ *
+ * Em tela (não-print) simula a folha com uma moldura e fundo cinza claro
+ * pra quem está revisando o preview antes de mandar pra impressora.
+ */
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+
+/* ---------- Barra de ações (só em tela) ---------- */
+
+.barraAcoes {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+
+.voltar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: var(--ink-soft);
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius);
+}
+
+.voltar:hover {
+  background: #e8eaee;
+}
+
+.infoBarra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  justify-content: center;
+}
+
+.codigo {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: 'SF Mono', Consolas, Menlo, monospace;
+  color: var(--ink);
+}
+
+.statusBarra {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- Folha A4 ---------- */
+
+.folha {
+  max-width: 210mm;
+  min-height: 297mm;
+  margin: 20px auto;
+  padding: 12mm;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 8mm;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+  color: #111;
+}
+
+/* ---------- Cada via ---------- */
+
+.via {
+  display: flex;
+  flex-direction: column;
+  gap: 5mm;
+  flex: 1;
+  padding: 4mm 0;
+  /* Evita que a via quebre entre duas páginas */
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+
+.cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10mm;
+  padding-bottom: 3mm;
+  border-bottom: 2px solid #111;
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.monograma {
+  width: 42px;
+  height: 42px;
+  background: #111;
+  color: #fff;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.textosMarca {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.empresa {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.produto {
+  font-size: 9.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #444;
+  margin-top: 2px;
+}
+
+.viaBadge {
+  font-size: 14px;
+  font-weight: 800;
+  padding: 6px 14px;
+  border: 2px solid #111;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.viaDeposito {
+  background: #fff;
+  color: #111;
+}
+
+.viaLavanderia {
+  background: #111;
+  color: #fff;
+}
+
+.titulo {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #111;
+}
+
+.avisoEncerrado {
+  padding: 6px 10px;
+  border: 1.5px dashed #666;
+  background: #f5f5f5;
+  color: #333;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ---------- Metadados (código, data, origem etc.) ---------- */
+
+.meta {
+  display: grid;
+  gap: 2mm;
+}
+
+.metaLinha {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+}
+
+.metaDl {
+  margin: 0;
+  padding: 3px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.metaDl dt {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+}
+
+.metaDl dd {
+  margin: 0;
+  font-size: 12px;
+  color: #111;
+}
+
+.metaFull {
+  grid-column: 1 / -1;
+}
+
+/* ---------- Tabela de materiais ---------- */
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid #111;
+}
+
+.tabela th {
+  text-align: left;
+  padding: 5px 8px;
+  background: #111;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tabela td {
+  padding: 5px 8px;
+  border-top: 1px solid #ccc;
+}
+
+.tabela tbody tr:first-child td {
+  border-top: none;
+}
+
+.colItem {
+  width: 72%;
+}
+
+.colQtd {
+  width: 28%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabelaVazia {
+  text-align: center !important;
+  color: #888;
+  padding: 10px !important;
+  font-style: italic;
+}
+
+.tabela tfoot td {
+  padding: 6px 8px;
+  border-top: 2px solid #111;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.totalLabel {
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.totalValor {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Observações ---------- */
+
+.observacao {
+  margin-top: 2mm;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  background: #fafafa;
+}
+
+.observacaoLabel {
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin-bottom: 2px;
+}
+
+.observacaoTexto {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #111;
+}
+
+/* ---------- Assinaturas ---------- */
+
+.assinaturas {
+  margin-top: auto;
+  padding-top: 6mm;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10mm;
+}
+
+.assinaturaBloco {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.linhaAssinatura {
+  height: 14mm;
+  border-bottom: 1px solid #111;
+}
+
+.assinaturaLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #111;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.assinaturaSub {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.01em;
+  color: #666;
+  font-size: 9.5px;
+}
+
+/* ---------- Rodapé ---------- */
+
+.rodape {
+  margin-top: 2mm;
+  font-size: 9px;
+  color: #888;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Linha de corte entre vias ---------- */
+
+.linhaCorte {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2mm 0;
+  color: #888;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.linhaCorte::before,
+.linhaCorte::after {
+  content: '';
+  flex: 1;
+  height: 0;
+  border-top: 1.5px dashed #888;
+}
+
+.tesoura {
+  font-size: 14px;
+}
+
+.corteTexto {
+  white-space: nowrap;
+}
+
+/* ---------- Impressão ---------- */
+
+@media print {
+  .barraAcoes {
+    display: none !important;
+  }
+
+  /* Na impressão, .folha cobre a área útil (max-width:none, margin:0,
+   * padding:0). O fundo cinza de body/html não chega a ser pintado porque
+   * o browser respeita @page { margin: 12mm } como margem física — fora
+   * da área imprimível. Não precisamos (e o CSS Module não aceita)
+   * forçar body/html daqui. Se um dia for necessário, vai pra globals.css. */
+  .folha {
+    max-width: none;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    box-shadow: none;
+    gap: 6mm;
+  }
+
+  /* Força cor chapada no badge VIA LAVANDERIA mesmo quando o navegador
+   * decide economizar tinta removendo backgrounds. */
+  .viaLavanderia {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  .monograma,
+  .tabela th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+}
+
+/* ---------- Responsivo (tela pequena antes de imprimir) ---------- */
+
+@media (max-width: 820px) {
+  .folha {
+    padding: 6mm;
+  }
+
+  .metaLinha {
+    grid-template-columns: 1fr;
+    gap: 2mm;
+  }
+
+  .assinaturas {
+    grid-template-columns: 1fr;
+    gap: 6mm;
+  }
+}

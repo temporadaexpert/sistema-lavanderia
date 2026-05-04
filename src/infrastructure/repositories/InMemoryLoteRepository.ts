@@ -36,4 +36,8 @@ export class InMemoryLoteRepository implements LoteRepository {
     if (filtro?.ateDataEnvio) out = out.filter((l) => l.dataEnvio <= filtro.ateDataEnvio!);
     return out;
   }
+
+  async limpar(): Promise<void> {
+    this.store.clear();
+  }
 }

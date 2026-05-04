@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {
-  categoriasExistentes,
+  listarCategoriasAtivas,
   listarTodosMateriais,
   unidadesExistentes,
 } from '@/app/_lib/materialData';
@@ -22,7 +22,7 @@ export default async function MateriaisListagem({ searchParams }: PageProps) {
 
   const [todos, categorias, unidades] = await Promise.all([
     listarTodosMateriais(),
-    categoriasExistentes(),
+    listarCategoriasAtivas(),
     unidadesExistentes(),
   ]);
 

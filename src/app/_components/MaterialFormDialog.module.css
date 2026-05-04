@@ -32,16 +32,26 @@
   background: #f6faff;
 }
 
+/* ---------- Dialog: container fixo, sem scroll próprio ----------
+ *
+ * Quem scrolla é o FORM dentro. Antes, o dialog tinha overflow:auto e
+ * filhos com min-content do <input type=number> empurravam horizontalmente
+ * — daí a scrollbar lateral. Agora o dialog é só a "caixa": largura
+ * limitada a 94vw, altura limitada a 92vh, overflow hidden. Nenhum filho
+ * pode estourar. O form é o único elemento com scroll vertical.
+ */
 .dialog {
-  width: min(600px, 94vw);
+  width: min(640px, 94vw);
+  max-width: 94vw;
   max-height: 92vh;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
   color: var(--text);
-  overflow: auto;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .dialog::backdrop {
@@ -50,9 +60,17 @@
 }
 
 .form {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   padding: 20px;
+  /* Scroll vertical aqui; nunca horizontal. max-height bate com o dialog
+   * pra garantir que o scroll container seja este e não o dialog. */
+  max-height: 92vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .header {
@@ -62,15 +80,22 @@
   gap: 12px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  /* Se o título for gigante (ex.: "Editar Toalha com nome muito longo"),
+   * quebra em vez de empurrar o botão X pra fora. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fecharX {
+  flex-shrink: 0;
   width: 28px;
   height: 28px;
   border: none;
@@ -92,21 +117,30 @@
   cursor: not-allowed;
 }
 
+/* ---------- Grid de campos responsivo ----------
+ *
+ * `minmax(0, 1fr)` no lugar de `1fr` é CRÍTICO: o default do track é
+ * `minmax(auto, 1fr)`, e `auto` resolve pro min-content do filho — que
+ * no caso de <input type=number> é grande o bastante pra empurrar a
+ * célula pra fora do dialog. Com `minmax(0, 1fr)` a célula pode encolher
+ * até 0, deixando o `width: 100%` dos inputs se ajustar.
+ */
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 
 @media (max-width: 560px) {
   .row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 .field {
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .label {
@@ -114,14 +148,20 @@
   font-size: 13px;
 }
 
+/* Todos os inputs do form: 100% do container, sem min-width intrínseco.
+ * Vale pra text, number, select, textarea, datalist-target. */
 .input {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: #fff;
   font-family: inherit;
+  font-size: 14px;
   transition: border-color 120ms, box-shadow 120ms;
+  box-sizing: border-box;
 }
 
 .input:focus {
@@ -134,6 +174,11 @@
   font-size: 12px;
   color: var(--text-muted);
   font-weight: normal;
+  margin: 0;
+  line-height: 1.4;
+  /* Quebra texto longo em vez de empurrar horizontalmente */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .checkboxRow {
@@ -143,6 +188,7 @@
   background: #fafbfc;
   border: 1px solid var(--border);
   border-radius: 6px;
+  min-width: 0;
 }
 
 .checkboxLabel {
@@ -155,6 +201,7 @@
 }
 
 .checkboxLabel input[type='checkbox'] {
+  flex-shrink: 0;
   width: 16px;
   height: 16px;
   accent-color: var(--accent);
@@ -167,13 +214,25 @@
   border: 1px solid #f5c6c0;
   border-radius: 6px;
   font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
+/* ---------- Footer sticky ----------
+ *
+ * Botões sempre visíveis mesmo em telas baixas com muitos campos. O
+ * form rola por baixo, os botões ficam grudados no rodapé do dialog.
+ */
 .acoes {
+  position: sticky;
+  bottom: 0;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 6px;
+  padding: 12px 0 4px;
+  margin-top: auto;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff 30%);
+  flex-shrink: 0;
 }
 
 .botaoSecundario {
@@ -211,4 +270,86 @@
 
 .botaoPrimario:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+/* ---------- Select + botão "+ Nova categoria" ---------- */
+
+.categoriaRow {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.categoriaRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.botaoCategoria {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: #fafbfc;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms, border-color 120ms;
+}
+
+.botaoCategoria:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+/* ---------- Sub-modal de nova categoria ---------- */
+
+.subDialog {
+  width: min(420px, 92vw);
+  max-width: 92vw;
+  max-height: 85vh;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  color: var(--text);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.subDialog::backdrop {
+  background: rgba(20, 24, 30, 0.5);
+}
+
+.subForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  max-height: 85vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.subHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.subHeader h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
 }

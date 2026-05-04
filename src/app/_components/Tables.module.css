@@ -62,3 +62,39 @@
   font-weight: 500;
   vertical-align: middle;
 }
+
+.alerta {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.abaixoMinimo {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.badgeCancelado {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid #f5c6c0;
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.rowCancelada td {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.rowCancelada .badgeCancelado {
+  text-decoration: none;
+}

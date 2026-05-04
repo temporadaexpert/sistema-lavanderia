@@ -610,6 +610,303 @@
   border-color: #bde1cd;
 }
 
+.prioSemContato {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+  font-weight: 700;
+}
+
+.flagSemContato {
+  display: inline-block;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: var(--danger);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.prioPromessaVencida {
+  background: #7d1a14;
+  color: #fff;
+  border-color: #7d1a14;
+  font-weight: 700;
+}
+
+.flagVencida {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: #7d1a14;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 0 0 2px rgba(125, 26, 20, 0.15);
+}
+
+/* Seção "Promessas vencidas" no dashboard — destaque máximo. */
+
+.bannerPromessasVencidas {
+  padding: 14px 16px;
+  background: linear-gradient(180deg, #fff5f3 0%, #ffffff 100%);
+  border: 1px solid #f5c6c0;
+  border-left: 4px solid #7d1a14;
+  border-radius: var(--radius-sm);
+}
+
+.bannerPromessasTitulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #7d1a14;
+  margin-bottom: 4px;
+}
+
+.bannerPromessasContador {
+  display: inline-block;
+  min-width: 22px;
+  padding: 1px 7px;
+  text-align: center;
+  background: #7d1a14;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bannerPromessasDesc {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: #7d1a14;
+}
+
+.alertaItemVencida {
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #f5c6c0;
+  border-radius: var(--radius-sm);
+  transition: background 120ms, border-color 120ms;
+  margin-bottom: 6px;
+}
+
+.alertaItemVencida:hover {
+  background: #fff5f3;
+  border-color: #e7a69f;
+}
+
+/* ---------- Controle diário do depósito ---------- */
+
+.controleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.controleStat {
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.controleStatAlerta {
+  border-color: #f5a79c;
+  background: var(--danger-soft);
+}
+
+.controleStatLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.controleStatValor {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controleStatAlerta .controleStatValor {
+  color: var(--danger);
+}
+
+.controleBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--success-soft);
+  color: var(--success);
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.controleVazio {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ---------- Controle diário: chip de status + responsáveis + diverge ---------- */
+
+.controleTituloLinha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.controleChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.controleChipOk {
+  background: var(--success-soft);
+  color: var(--success);
+  border-color: #bce5c8;
+}
+
+.controleChipAlerta {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: #f5c6c0;
+}
+
+.controleChipInfo {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: #c8d9f5;
+}
+
+.controleChipNeutro {
+  background: var(--ink-soft);
+  color: var(--text-muted);
+  border-color: var(--border);
+}
+
+.controleResp {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.controleResp strong {
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.controleDivergencia {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--danger-soft);
+  border: 1px solid #f5c6c0;
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius);
+}
+
+.controleDivergenciaTitulo {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--danger);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.controleDivergencia ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.controleDivergencia li strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.controleMotivo {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed #f5a79c;
+  font-size: 12.5px;
+  color: #6b1b14;
+  line-height: 1.4;
+}
+
+/* ---------- Warning: dia anterior em aberto ---------- */
+
+.controleWarning {
+  margin: 8px 0 14px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, #fee4df 0%, #fdecea 100%);
+  border: 1.5px solid var(--danger);
+  border-radius: var(--radius);
+  color: #6b1b14;
+}
+
+.controleWarningTopo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--danger);
+  margin-bottom: 4px;
+}
+
+.controleWarningSub {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.controleWarningLink {
+  display: inline-block;
+  padding: 6px 12px;
+  background: var(--danger);
+  color: #fff;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: background 120ms;
+}
+
+.controleWarningLink:hover {
+  background: #9e2d20;
+}
+
 /* ---------- Atalhos ---------- */
 
 .atalhos {

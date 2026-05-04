@@ -1,11 +1,7 @@
 import type { Movimentacao } from '@/domain/entities/Movimentacao';
 import { MovimentacaoId } from '@/domain/types/ids';
 import { REGRAS_MOVIMENTACAO } from '@/domain/rules/movimentacaoRules';
-import {
-  NotFoundError,
-  SaldoInsuficienteError,
-  ValidationError,
-} from '@/domain/errors/DomainErrors';
+import { NotFoundError, ValidationError } from '@/domain/errors/DomainErrors';
 import type { ItemRepository } from '../ports/ItemRepository';
 import type { LocalRepository } from '../ports/LocalRepository';
 import type { MovimentacaoRepository } from '../ports/MovimentacaoRepository';
@@ -76,10 +72,13 @@ export class MovimentacaoService {
     }
 
     if (regra.exigeSaldoNaOrigem && input.origemId) {
-      const saldoAtual = await this.saldos.saldoDe(input.itemId, input.origemId);
-      if (saldoAtual < input.quantidade) {
-        throw new SaldoInsuficienteError(input.itemId, input.origemId, saldoAtual, input.quantidade);
-      }
+      // Ponto único de validação: respeita o novo modelo (estoqueTotal
+      // definido → disponibilidade) com fallback legacy (saldo por local).
+      await this.saldos.garantirEstoqueParaSaida(
+        input.itemId,
+        input.origemId,
+        input.quantidade,
+      );
     }
 
     const agora = this.clock.agoraISO();
@@ -106,10 +105,66 @@ export class MovimentacaoService {
       loteId: input.loteId ?? null,
       precoUnitarioSnapshot,
       registradoEm: agora,
+      cancelada: false,
+      canceladoEm: null,
+      canceladoPor: null,
+      motivoCancelamento: null,
     };
 
     await this.movimentacoes.registrar(mov);
     return mov;
+  }
+
+  // Tipos que a equipe operacional pode corrigir sem quebrar cadeia de
+  // lote: entradas/saídas/retornos puros e ajustes manuais (não ligados a
+  // encerramento de lote). Cancelar uma movimentação de lote corromperia
+  // o estado do lote — bloqueado de propósito.
+  static readonly TIPOS_CANCELAVEIS = new Set([
+    'entrada_deposito',
+    'saida_imovel',
+    'retorno_imovel',
+    'ajuste',
+  ] as const);
+
+  async cancelar(input: {
+    readonly id: MovimentacaoId;
+    readonly motivo: string;
+    readonly responsavel: string;
+  }): Promise<Movimentacao> {
+    const motivo = input.motivo?.trim();
+    const responsavel = input.responsavel?.trim();
+    if (!motivo) throw new ValidationError('Motivo do cancelamento é obrigatório');
+    if (!responsavel) throw new ValidationError('Responsável é obrigatório');
+
+    const mov = await this.movimentacoes.porId(input.id);
+    if (!mov) throw new NotFoundError('Movimentação', input.id);
+    if (mov.cancelada) {
+      throw new ValidationError('Movimentação já foi cancelada anteriormente');
+    }
+    if (!MovimentacaoService.TIPOS_CANCELAVEIS.has(mov.tipo as never)) {
+      throw new ValidationError(
+        `Movimentação do tipo '${mov.tipo}' não pode ser cancelada. Tipos cancelável: ${Array.from(MovimentacaoService.TIPOS_CANCELAVEIS).join(', ')}`,
+      );
+    }
+    if (mov.loteId) {
+      throw new ValidationError(
+        'Movimentação vinculada a lote de lavanderia não pode ser cancelada isoladamente — use o fluxo do lote',
+      );
+    }
+
+    const canceladoEm = this.clock.agoraISO();
+    await this.movimentacoes.marcarCancelada(mov.id, {
+      canceladoEm,
+      canceladoPor: responsavel,
+      motivoCancelamento: motivo,
+    });
+    return {
+      ...mov,
+      cancelada: true,
+      canceladoEm,
+      canceladoPor: responsavel,
+      motivoCancelamento: motivo,
+    };
   }
 
   private validarFormato(input: RegistrarMovimentacaoInput): void {

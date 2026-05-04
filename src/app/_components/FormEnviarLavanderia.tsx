@@ -61,8 +61,15 @@ export function FormEnviarLavanderia({ itens, depositos, lavanderias }: Props) {
     setResultado(null);
     setLoading(true);
     try {
+      // Em sucesso, criarLoteEnvioAction faz redirect server-side
+      // pra /romaneio/lavanderia/[id] — o await abaixo nunca resolve
+      // (NEXT_REDIRECT propaga até o RPC do Next handlear navegação).
+      // Se a action retornar normalmente (caminho de erro), exibimos
+      // a mensagem amigável.
       const r = await criarLoteEnvioAction(formData);
       setResultado(r);
+      // Se chegou aqui com r.ok=true, é defensivo (action devia ter
+      // redirecionado) — limpa o form e refresh.
       if (r.ok) {
         resetar();
         router.refresh();

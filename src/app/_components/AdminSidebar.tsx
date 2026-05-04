@@ -16,9 +16,12 @@ const GESTAO: readonly ItemNav[] = [
   { href: '/admin/materiais', label: 'Materiais' },
   { href: '/admin/locais', label: 'Locais' },
   { href: '/admin/lotes-lavanderia', label: 'Lotes' },
-  { href: '/admin/divergencias', label: 'Divergências' },
+  { href: '/admin/romaneios-lavanderia', label: 'Romaneios' },
+  { href: '/admin/divergencias', label: 'Divergências (lote)' },
+  { href: '/admin/divergencias-diarias', label: 'Divergências (diárias)' },
   { href: '/admin/lavanderia', label: 'Custos' },
   { href: '/admin/perdas', label: 'Perdas' },
+  { href: '/admin/configuracoes', label: 'Configurações' },
 ];
 
 function estaAtivo(pathname: string, href: string): boolean {
@@ -59,7 +62,7 @@ export function AdminSidebar() {
         <div className={styles.grupoTitulo}>Atalhos</div>
         <ul className={styles.lista}>
           <li>
-            <Link href="/" className={styles.item}>
+            <Link href="/operacao" className={styles.item}>
               <span className={styles.itemLabel}>Operação</span>
               <span className={styles.seta} aria-hidden="true">
                 ↗

@@ -36,3 +36,16 @@ export class SaldoInsuficienteError extends RegraNegocioError {
     );
   }
 }
+
+// Erro amigável para o modelo novo de inventário (admin define
+// estoqueTotal, sistema calcula disponibilidade). Usa o NOME do item
+// em vez do id técnico — a funcionária vê "Toalha" em vez de
+// "item-uuid-xyz" quando o envio não cabe no disponível.
+export class EstoqueInsuficienteError extends RegraNegocioError {
+  constructor(nomeItem: string, disponivel: number, solicitado: number) {
+    super(
+      'ESTOQUE_INSUFICIENTE',
+      `Estoque disponível insuficiente para ${nomeItem}. Disponível: ${disponivel}, solicitado: ${solicitado}.`,
+    );
+  }
+}

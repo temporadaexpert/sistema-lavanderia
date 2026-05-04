@@ -63,8 +63,49 @@ async function cicloLavanderia(
   }
 }
 
+// Cria Category para cada nome distinto dos itens persistidos sem
+// `categoriaId` (sentinela = ''), reescrevendo os itens com o id correto.
+// Idempotente: itens que já têm categoriaId válido são ignorados.
+async function migrarCategoriasLegacy(container: Container): Promise<void> {
+  const itens = await container.itens.listar();
+  const semCategoria = itens.filter((i) => !i.categoriaId);
+  if (semCategoria.length === 0) return;
+
+  for (const item of semCategoria) {
+    // `item.categoria` (string legacy) deve ter sido preservado pela
+    // normalização do repo. Se por algum motivo chegou vazio, usa
+    // "sem categoria" como fallback pra não perder o item.
+    const nomeCategoria = item.categoria?.trim() || 'Sem categoria';
+    const categoria =
+      await container.categoryService.obterOuCriarPorNome(nomeCategoria);
+    await container.itens.atualizar({
+      ...item,
+      categoriaId: categoria.id,
+      categoria: categoria.nome,
+    });
+  }
+}
+
 async function bootstrap(): Promise<Container> {
   const container = criarContainer();
+
+  // Migração idempotente de categorias legacy: itens gravados antes do
+  // Category virar entidade vinham com `categoria: string` livre. Criamos
+  // uma Category pra cada nome distinto e reescrevemos os itens com o id.
+  // Roda silenciosamente em todo boot — é O(itens) e não faz I/O quando
+  // não há nada a migrar.
+  await migrarCategoriasLegacy(container);
+
+  // Seed é rodado APENAS quando não há itens persistidos — ou seja, primeira
+  // vez que o sistema roda (ou após limpeza manual do `data/*.json`). Em
+  // boots subsequentes, os itens/locais do gestor já vivem em disco e
+  // repopular sobrescreveria com dados demo. Movimentações demo também só
+  // fazem sentido junto do cadastro demo, então pulamos o bloco todo.
+  const itensPersistidos = await container.itens.listar();
+  if (itensPersistidos.length > 0) {
+    return container;
+  }
+
   await popularSeed(container);
   const mov = container.movimentacaoService;
   const lote = container.loteLavanderia;

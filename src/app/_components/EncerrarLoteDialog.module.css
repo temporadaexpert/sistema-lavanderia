@@ -86,6 +86,56 @@
   line-height: 1.5;
 }
 
+.riscoBloco {
+  padding: 14px 16px;
+  background: #fdecea;
+  border: 1px solid #f5a79c;
+  border-left: 4px solid var(--danger);
+  border-radius: 6px;
+  color: #6b1b14;
+  display: grid;
+  gap: 10px;
+}
+
+.riscoTitulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--danger);
+}
+
+.riscoTexto {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.riscoLista {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  display: grid;
+  gap: 4px;
+}
+
+.riscoCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.riscoCheck input {
+  margin-top: 2px;
+  accent-color: var(--danger);
+}
+
 .field {
   display: grid;
   gap: 6px;

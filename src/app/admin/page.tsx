@@ -1,13 +1,25 @@
 import Link from 'next/link';
 import { dashboardSnapshot } from '@/app/_lib/dashboardData';
-import { listarDivergencias, resumoDivergencias } from '@/app/_lib/divergenciaData';
+import {
+  divergenciaDoDia,
+  hojeISO,
+  listarDiasAbertosAnteriores,
+  listarDivergenciasDiarias,
+  obterControleDoDia,
+  resumoControleDiario,
+} from '@/app/_lib/controleDiarioData';
+import { listarItensTodos } from '@/app/_lib/data';
+import {
+  listarDivergenciasComContato,
+  resumoDivergencias,
+  type DivergenciaComContato,
+} from '@/app/_lib/divergenciaData';
 import type {
   AlertaEstoqueBaixo,
   AlertaLotePendente,
   UltimoLancamento,
 } from '@/application/services/DashboardAdminService';
 import type {
-  DivergenciaLote,
   PrioridadeDivergencia,
   ResumoDivergencias,
 } from '@/application/services/DivergenciaService';
@@ -73,11 +85,40 @@ const PRIORIDADE_CLASS: Record<PrioridadeDivergencia, string> = {
 };
 
 export default async function AdminDashboard() {
-  const [snap, divergencias, resumoDiv] = await Promise.all([
+  const hoje = hojeISO();
+  const [
+    snap,
+    divergencias,
+    resumoDiv,
+    resumoControle,
+    controleHoje,
+    divergenciaHoje,
+    divergenciasAbertas,
+    diasAnterioresAbertos,
+    itensTodos,
+  ] = await Promise.all([
     dashboardSnapshot(),
-    listarDivergencias(),
+    listarDivergenciasComContato(),
     resumoDivergencias(),
+    resumoControleDiario(),
+    obterControleDoDia(hoje),
+    divergenciaDoDia(hoje),
+    // Todos os dias com divergência não-resolvida (fechado_com_divergencia
+    // ou ainda aberto mostrando discrepância).
+    listarDivergenciasDiarias(),
+    listarDiasAbertosAnteriores(hoje),
+    listarItensTodos(),
   ]);
+  const nomeItemPorId = new Map(itensTodos.map((i) => [i.id, i.nome]));
+  const diaAnteriorPendente = diasAnterioresAbertos[0] ?? null;
+  const criticasSemContato = divergencias.filter(
+    (d) =>
+      (d.prioridade === 'critica' || d.prioridade === 'excesso') &&
+      d.estatisticaContato.nuncaCobrado,
+  ).length;
+  const promessasVencidas = divergencias.filter(
+    (d) => d.estatisticaContato.promessaVencida,
+  );
   const mesReferencia = fmtMesCabecalho.format(new Date(snap.inicioMes));
   const hojeFormatado = fmtDataCurta.format(new Date(snap.agora));
 
@@ -174,11 +215,24 @@ export default async function AdminDashboard() {
         />
       </section>
 
+      {/* Controle diário sobe pra aqui: logo depois dos KPIs, acima do
+          fold — o gestor vê status do dia antes de rolar para lançamentos
+          e alertas. Fonte: data/controles-diarios.json via
+          c.controleDiario (não mistura com movimentações/lavanderia). */}
+      <ControleDiarioSection
+        resumo={resumoControle}
+        controleHoje={controleHoje}
+        divergenciaHoje={divergenciaHoje}
+        divergenciasAbertas={divergenciasAbertas.length}
+        diaAnteriorPendente={diaAnteriorPendente}
+        nomeItemPorId={nomeItemPorId}
+      />
+
       <section className={styles.duasColunas}>
         <article className={styles.bloco}>
           <div className={styles.blocoHeader}>
             <h2>Últimos lançamentos</h2>
-            <Link href="/" className={styles.blocoLink}>
+            <Link href="/operacao" className={styles.blocoLink}>
               Ver operação →
             </Link>
           </div>
@@ -197,17 +251,283 @@ export default async function AdminDashboard() {
             topDivergencias={topDivergencias}
             estoque={snap.alertasEstoque}
             depositoNome={snap.depositoPrincipalNome}
+            criticasSemContato={criticasSemContato}
+            promessasVencidas={promessasVencidas}
           />
         </article>
       </section>
 
-      <section className={styles.atalhos} aria-label="Atalhos">
+      <AdminDashboardAtalhos snap={snap} resumoDiv={resumoDiv} />
+    </main>
+  );
+}
+
+// Extraído pra ler melhor: mostra tudo que o admin precisa saber sobre
+// controle diário em um bloco só — status/responsáveis/divergência.
+function ControleDiarioSection({
+  resumo,
+  controleHoje,
+  divergenciaHoje,
+  divergenciasAbertas,
+  diaAnteriorPendente,
+  nomeItemPorId,
+}: {
+  resumo: Awaited<ReturnType<typeof resumoControleDiario>>;
+  controleHoje: Awaited<ReturnType<typeof obterControleDoDia>>;
+  divergenciaHoje: Awaited<ReturnType<typeof divergenciaDoDia>>;
+  divergenciasAbertas: number;
+  diaAnteriorPendente: Awaited<
+    ReturnType<typeof listarDiasAbertosAnteriores>
+  >[number] | null;
+  nomeItemPorId: ReadonlyMap<string, string>;
+}) {
+  // Sem controleHoje E sem histórico: empty state claro.
+  if (!controleHoje && !resumo) {
+    return (
+      <section className={styles.bloco} aria-label="Controle diário do depósito">
+        <div className={styles.blocoHeader}>
+          <h2>Controle diário do depósito</h2>
+          <Link href="/operacao" className={styles.blocoLink}>
+            Abrir controle →
+          </Link>
+        </div>
+        {diaAnteriorPendente && (
+          <WarningDiaAnterior pendente={diaAnteriorPendente} />
+        )}
+        <p className={styles.controleVazio}>
+          Nenhum controle diário iniciado hoje.
+        </p>
+      </section>
+    );
+  }
+
+  // Sem controleHoje mas tem histórico (último dia foi ontem ou antes):
+  // ainda mostra a seção pra destacar o estado "ninguém começou hoje".
+  if (!controleHoje) {
+    return (
+      <section className={styles.bloco} aria-label="Controle diário do depósito">
+        <div className={styles.blocoHeader}>
+          <h2>Controle diário do depósito</h2>
+          <Link href="/operacao" className={styles.blocoLink}>
+            Abrir controle →
+          </Link>
+        </div>
+        {diaAnteriorPendente && (
+          <WarningDiaAnterior pendente={diaAnteriorPendente} />
+        )}
+        <p className={styles.controleVazio}>
+          Nenhum controle diário iniciado hoje. Último registro:{' '}
+          <strong>
+            {resumo
+              ? fmtDataCurta.format(new Date(`${resumo.dataReferencia}T12:00:00Z`))
+              : '—'}
+          </strong>
+          .
+        </p>
+      </section>
+    );
+  }
+
+  // Se há controleHoje mas resumoDashboard voltou null (edge case: repo
+  // vazio logo após um reset, com insert de hoje no meio), ainda assim
+  // renderiza com valores zerados.
+  const totalEnviado = resumo?.totalEnviado ?? 0;
+  const totalRetornado = resumo?.totalRetornado ?? 0;
+  const totalLimpoReap = resumo?.totalLimpoReaproveitado ?? 0;
+  const totalFaltante = resumo?.totalFaltante ?? 0;
+  const dataRef = resumo?.dataReferencia ?? controleHoje.data;
+  const temControleHoje = resumo?.temControleHoje ?? true;
+
+  // Fonte da verdade: controleHoje (quando existe). Se não há registro
+  // hoje, mostra aviso e usa o último dia como referência para histórico.
+  const estatusChip = statusDoDia(controleHoje, divergenciaHoje);
+  const responsavelEnvio = controleHoje?.responsavelEnvio ?? null;
+  const responsavelRetorno = controleHoje?.responsavelRetorno ?? null;
+  const responsavelFechamento = controleHoje?.responsavelFechamento ?? null;
+  const motivo = controleHoje?.motivoDivergencia ?? null;
+
+  const linhasFaltantes =
+    divergenciaHoje?.linhas.filter((l) => l.classe === 'faltando') ?? [];
+  const linhasExcedentes =
+    divergenciaHoje?.linhas.filter((l) => l.classe === 'excedente') ?? [];
+
+  return (
+    <section className={styles.bloco} aria-label="Controle diário do depósito">
+      <div className={styles.blocoHeader}>
+        <div className={styles.controleTituloLinha}>
+          <h2>Controle diário do depósito</h2>
+          <span className={`${styles.controleChip} ${styles[estatusChip.classe]}`}>
+            {estatusChip.label}
+          </span>
+        </div>
+        <Link
+          href={
+            divergenciasAbertas > 0
+              ? '/admin/divergencias-diarias'
+              : '/operacao'
+          }
+          className={styles.blocoLink}
+        >
+          {divergenciasAbertas > 0
+            ? `${divergenciasAbertas} com divergência →`
+            : 'Abrir controle →'}
+        </Link>
+      </div>
+
+      {diaAnteriorPendente && (
+        <WarningDiaAnterior pendente={diaAnteriorPendente} />
+      )}
+
+      <div className={styles.controleGrid}>
+        <div className={styles.controleStat}>
+          <div className={styles.controleStatLabel}>Referência</div>
+          <div className={styles.controleStatValor}>
+            {fmtDataCurta.format(new Date(`${dataRef}T12:00:00Z`))}
+            {temControleHoje && <span className={styles.controleBadge}>hoje</span>}
+          </div>
+        </div>
+        <div className={styles.controleStat}>
+          <div className={styles.controleStatLabel}>Enviado hoje</div>
+          <div className={styles.controleStatValor}>{fmtNum.format(totalEnviado)}</div>
+        </div>
+        <div className={styles.controleStat}>
+          <div className={styles.controleStatLabel}>Retornado hoje</div>
+          <div className={styles.controleStatValor}>{fmtNum.format(totalRetornado)}</div>
+        </div>
+        <div className={styles.controleStat}>
+          <div className={styles.controleStatLabel}>Limpo reaproveitado</div>
+          <div className={styles.controleStatValor}>
+            {fmtNum.format(totalLimpoReap)}
+          </div>
+        </div>
+        <div
+          className={`${styles.controleStat} ${
+            totalFaltante > 0 ? styles.controleStatAlerta : ''
+          }`}
+        >
+          <div className={styles.controleStatLabel}>Faltante</div>
+          <div className={styles.controleStatValor}>{fmtNum.format(totalFaltante)}</div>
+        </div>
+      </div>
+
+      {(responsavelEnvio || responsavelRetorno || responsavelFechamento) && (
+        <div className={styles.controleResp}>
+          {responsavelEnvio && (
+            <span>
+              <strong>Envio:</strong> {responsavelEnvio}
+            </span>
+          )}
+          {responsavelRetorno && (
+            <span>
+              <strong>Retorno:</strong> {responsavelRetorno}
+            </span>
+          )}
+          {responsavelFechamento && (
+            <span>
+              <strong>Fechou com divergência:</strong> {responsavelFechamento}
+            </span>
+          )}
+        </div>
+      )}
+
+      {linhasFaltantes.length + linhasExcedentes.length > 0 && (
+        <div className={styles.controleDivergencia}>
+          <div className={styles.controleDivergenciaTitulo}>Itens com divergência hoje</div>
+          <ul>
+            {linhasFaltantes.map((l) => (
+              <li key={`f-${l.itemId}`}>
+                <strong>−{l.divergencia}</strong>{' '}
+                {nomeItemPorId.get(l.itemId) ?? l.itemId}
+              </li>
+            ))}
+            {linhasExcedentes.map((l) => (
+              <li key={`e-${l.itemId}`}>
+                <strong>+{-l.divergencia}</strong>{' '}
+                {nomeItemPorId.get(l.itemId) ?? l.itemId}
+              </li>
+            ))}
+          </ul>
+          {motivo && (
+            <p className={styles.controleMotivo}>
+              <strong>Motivo registrado:</strong> {motivo}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Classifica o status do dia em chip visual. Prioridade: divergência >
+// fechado > aberto > sem registro.
+// Aviso vermelho no topo da seção de controle diário quando há dia
+// anterior aberto. Reforço visual pro gestor cobrar fechamento.
+function WarningDiaAnterior({
+  pendente,
+}: {
+  pendente: Awaited<ReturnType<typeof listarDiasAbertosAnteriores>>[number];
+}) {
+  const [ano, mes, dia] = pendente.data.split('-');
+  const dataBR = `${dia}/${mes}/${ano}`;
+  return (
+    <div className={styles.controleWarning} role="alert">
+      <div className={styles.controleWarningTopo}>
+        <span aria-hidden>🚨</span>
+        <strong>Controle diário anterior em aberto: {dataBR}</strong>
+      </div>
+      <p className={styles.controleWarningSub}>
+        Responsável:{' '}
+        {pendente.responsavelEnvio ?? pendente.responsavelRetorno ?? '—'}. A
+        funcionária não pode iniciar novos dias até fechar esse.
+      </p>
+      <Link
+        href={`/operacao/retorno-diario?data=${pendente.data}`}
+        className={styles.controleWarningLink}
+      >
+        Abrir controle pendente →
+      </Link>
+    </div>
+  );
+}
+
+function statusDoDia(
+  controle: Awaited<ReturnType<typeof obterControleDoDia>>,
+  divergencia: Awaited<ReturnType<typeof divergenciaDoDia>>,
+): { label: string; classe: string } {
+  if (!controle) return { label: 'Sem registro hoje', classe: 'controleChipNeutro' };
+  if (controle.status === 'fechado_com_divergencia') {
+    return { label: 'Fechado com divergência', classe: 'controleChipAlerta' };
+  }
+  if (controle.status === 'fechado') {
+    return { label: 'Fechado', classe: 'controleChipOk' };
+  }
+  // aberto
+  if (divergencia?.aguardandoRetorno) {
+    // Estado neutro: tem envio, retorno ainda não conferido. NÃO é
+    // divergência — é só pendência de fechamento natural do dia.
+    return { label: 'Aberto · aguardando retorno', classe: 'controleChipInfo' };
+  }
+  if (divergencia?.temDivergencia) {
+    return { label: 'Aberto · divergência', classe: 'controleChipAlerta' };
+  }
+  return { label: 'Aberto', classe: 'controleChipInfo' };
+}
+
+function AdminDashboardAtalhos({
+  snap,
+  resumoDiv,
+}: {
+  snap: Awaited<ReturnType<typeof dashboardSnapshot>>;
+  resumoDiv: ResumoDivergencias;
+}) {
+  return (
+    <section className={styles.atalhos} aria-label="Atalhos">
         <h2 className={styles.atalhosTitulo}>Atalhos</h2>
         <div className={styles.atalhosGrid}>
           <AtalhoCard
-            href="/"
-            titulo="Operação"
-            descricao="Registrar envios, retornos e ajustes do dia a dia."
+            href="/operacao"
+            titulo="Tela operacional"
+            descricao="Central da funcionária: controle diário, lavanderia, imóveis, depósito."
           />
           <AtalhoCard
             href="/admin/lotes-lavanderia"
@@ -267,7 +587,6 @@ export default async function AdminDashboard() {
           />
         </div>
       </section>
-    </main>
   );
 }
 
@@ -344,11 +663,15 @@ function AlertasPriorizados({
   topDivergencias,
   estoque,
   depositoNome,
+  criticasSemContato,
+  promessasVencidas,
 }: {
   resumo: ResumoDivergencias;
-  topDivergencias: readonly DivergenciaLote[];
+  topDivergencias: readonly DivergenciaComContato[];
   estoque: readonly AlertaEstoqueBaixo[];
   depositoNome: string | null;
+  criticasSemContato: number;
+  promessasVencidas: readonly DivergenciaComContato[];
 }) {
   const totalAtivos =
     resumo.criticas + resumo.atencao + resumo.aguardando + resumo.excesso;
@@ -383,11 +706,65 @@ function AlertasPriorizados({
               {resumo.aguardando} aguardando
             </span>
           )}
+          {promessasVencidas.length > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioPromessaVencida}`}>
+              {promessasVencidas.length} promessa(s) vencida(s)
+            </span>
+          )}
+          {criticasSemContato > 0 && (
+            <span className={`${styles.prioBadge} ${styles.prioSemContato}`}>
+              {criticasSemContato} sem cobrança
+            </span>
+          )}
           <span className={styles.prioValor}>
             {fmtBRL.format(resumo.valorPendenteTotal)}
             {resumo.custoParcial && <span className={styles.parcialMark}>*</span>}
             <span className={styles.prioValorLabel}> em aberto</span>
           </span>
+        </div>
+      )}
+
+      {promessasVencidas.length > 0 && (
+        <div className={styles.bannerPromessasVencidas}>
+          <div className={styles.bannerPromessasTitulo}>
+            ⚠ Promessas vencidas
+            <span className={styles.bannerPromessasContador}>
+              {promessasVencidas.length}
+            </span>
+          </div>
+          <p className={styles.bannerPromessasDesc}>
+            A lavanderia prometeu e não cumpriu. Cobrar imediatamente.
+          </p>
+          <ul className={styles.alertaLista}>
+            {promessasVencidas.slice(0, 5).map((d) => (
+              <li key={d.lote.id} className={styles.alertaItemVencida}>
+                <Link
+                  href={`/admin/lotes-lavanderia/${d.lote.id}`}
+                  className={styles.alertaLink}
+                >
+                  <div className={styles.alertaLinhaPrincipal}>
+                    <code className={styles.codigoInline}>{d.lote.codigo}</code>
+                    <span className={styles.flagVencida}>
+                      {d.estatisticaContato.diasAtrasoPromessa}d de atraso
+                    </span>
+                  </div>
+                  <div className={styles.alertaLinhaDetalhe}>
+                    <span>
+                      <strong>{fmtNum.format(d.pendenciaEfetiva)}</strong> peça(s) ·
+                      {' '}
+                      {d.valorPendente > 0 ? fmtBRL.format(d.valorPendente) : 'sem preço'}
+                    </span>
+                    <span aria-hidden> · </span>
+                    <span>
+                      {d.estatisticaContato.ultimo
+                        ? `último contato há ${d.estatisticaContato.diasDesdeUltimoContato} dia(s)`
+                        : 'nunca cobrado'}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -410,6 +787,18 @@ function AlertasPriorizados({
                     >
                       {PRIORIDADE_LABEL[d.prioridade]}
                     </span>
+                    {d.estatisticaContato.promessaVencida && (
+                      <span className={styles.flagVencida}>
+                        VENCIDA {d.estatisticaContato.diasAtrasoPromessa}d
+                      </span>
+                    )}
+                    {!d.estatisticaContato.promessaVencida &&
+                      d.estatisticaContato.nuncaCobrado &&
+                      (d.prioridade === 'critica' ||
+                        d.prioridade === 'atencao' ||
+                        d.prioridade === 'excesso') && (
+                        <span className={styles.flagSemContato}>nunca cobrado</span>
+                      )}
                   </div>
                   <div className={styles.alertaLinhaDetalhe}>
                     <span>

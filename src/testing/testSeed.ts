@@ -1,6 +1,7 @@
 import type { Item } from '@/domain/entities/Item';
 import type { Local } from '@/domain/entities/Local';
-import { ItemId, LocalId } from '@/domain/types/ids';
+import type { Category } from '@/domain/entities/Category';
+import { CategoryId, ItemId, LocalId } from '@/domain/types/ids';
 import type { ContainerDeTeste } from './testContainer';
 
 // IDs fixos facilitam asserts nos testes (não dependem da ordem de
@@ -17,14 +18,47 @@ export const TEST_LOCAIS = {
   lavanderia: LocalId('local-lavanderia'),
 } as const;
 
+export const TEST_CATEGORIAS = {
+  toalha: CategoryId('cat-toalha'),
+  cama: CategoryId('cat-cama'),
+  outro: CategoryId('cat-outro'),
+} as const;
+
+export function categoriaToalha(): Category {
+  return {
+    id: TEST_CATEGORIAS.toalha,
+    nome: 'Toalha',
+    ativo: true,
+    criadoEm: '2026-01-01T00:00:00.000Z',
+  };
+}
+export function categoriaCama(): Category {
+  return {
+    id: TEST_CATEGORIAS.cama,
+    nome: 'Cama',
+    ativo: true,
+    criadoEm: '2026-01-01T00:00:00.000Z',
+  };
+}
+export function categoriaOutro(): Category {
+  return {
+    id: TEST_CATEGORIAS.outro,
+    nome: 'Outro',
+    ativo: true,
+    criadoEm: '2026-01-01T00:00:00.000Z',
+  };
+}
+
 export function itemToalha(): Item {
   return {
     id: TEST_ITENS.toalha,
     nome: 'Toalha',
-    categoria: 'toalha',
+    categoriaId: TEST_CATEGORIAS.toalha,
+    categoria: 'Toalha',
     unidade: 'un',
     valorUnitario: 30,
     estoqueMinimo: 10,
+    estoqueTotal: null,
     ativo: true,
     criadoEm: '2026-01-01T00:00:00.000Z',
   };
@@ -33,10 +67,12 @@ export function itemFronha(): Item {
   return {
     id: TEST_ITENS.fronha,
     nome: 'Fronha',
-    categoria: 'cama',
+    categoriaId: TEST_CATEGORIAS.cama,
+    categoria: 'Cama',
     unidade: 'un',
     valorUnitario: 15,
     estoqueMinimo: 20,
+    estoqueTotal: null,
     ativo: true,
     criadoEm: '2026-01-01T00:00:00.000Z',
   };
@@ -45,10 +81,12 @@ export function itemSemPreco(): Item {
   return {
     id: TEST_ITENS.semPreco,
     nome: 'Item sem preço',
-    categoria: 'outro',
+    categoriaId: TEST_CATEGORIAS.outro,
+    categoria: 'Outro',
     unidade: 'un',
     valorUnitario: null,
     estoqueMinimo: null,
+    estoqueTotal: null,
     ativo: true,
     criadoEm: '2026-01-01T00:00:00.000Z',
   };
@@ -84,6 +122,9 @@ export function localLavanderia(): Local {
 
 // Popula o catálogo mínimo que todos os testes usam. Chamado em beforeEach.
 export async function semearBasico(c: ContainerDeTeste): Promise<void> {
+  await c.categorias.criar(categoriaToalha());
+  await c.categorias.criar(categoriaCama());
+  await c.categorias.criar(categoriaOutro());
   await c.itens.criar(itemToalha());
   await c.itens.criar(itemFronha());
   await c.itens.criar(itemSemPreco());

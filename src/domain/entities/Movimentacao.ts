@@ -19,6 +19,12 @@ import type { MovimentacaoTipo } from '../types/enums';
 // sem valorUnitario cadastrado no momento do registro, ou (c) dado legado
 // anterior à introdução do snapshot — os dois últimos tratados com fallback
 // para o valorUnitario atual do item nos relatórios.
+// Campos de cancelamento: uma movimentação pode ser marcada como cancelada
+// por ação administrativa quando o operador registrou errado. Os campos
+// originais (tipo/quantidade/data/itemId/…) NUNCA são alterados — isso
+// preserva a trilha de auditoria. Consumidores de projeção (saldo,
+// relatórios, dashboard) ignoram canceladas por padrão (via filtro do
+// repositório); o histórico na UI mostra canceladas riscadas com o motivo.
 export interface Movimentacao {
   readonly id: MovimentacaoId;
   readonly dataHora: string;
@@ -32,4 +38,8 @@ export interface Movimentacao {
   readonly loteId: LoteId | null;
   readonly precoUnitarioSnapshot: number | null;
   readonly registradoEm: string;
+  readonly cancelada: boolean;
+  readonly canceladoEm: string | null;
+  readonly canceladoPor: string | null;
+  readonly motivoCancelamento: string | null;
 }

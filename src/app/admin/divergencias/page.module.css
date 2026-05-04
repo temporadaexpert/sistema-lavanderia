@@ -349,3 +349,68 @@
   line-height: 1.6;
   text-align: center;
 }
+
+/* ---- Coluna de contato/cobrança ---- */
+
+.colContato {
+  min-width: 140px;
+}
+
+.semContato {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid #f5c6c0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.contatoResumo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.contatoLinha {
+  color: var(--text);
+}
+
+.contatoPromessa {
+  font-size: 11.5px;
+  color: var(--warn);
+  font-style: italic;
+}
+
+.contatoSubLinha {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.seloVencida {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: #7d1a14;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 0 0 2px rgba(125, 26, 20, 0.15);
+  width: fit-content;
+}
+
+.card_vencida.cardDestaque {
+  border-color: #7d1a14;
+  background: linear-gradient(180deg, #fff5f3 0%, #fff 100%);
+}
+
+.card_vencida .cardValor {
+  color: #7d1a14;
+}

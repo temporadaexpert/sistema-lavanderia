@@ -177,6 +177,7 @@ describe('DivergenciaService', () => {
         loteId: lote.id,
         motivo: 'perda_confirmada',
         responsavel: 'G',
+        reconhecimentoRisco: true,
       });
       const divergencia = await c.divergenciaService.porLoteId(lote.id);
       expect(divergencia?.prioridade).toBe('encerrado_baixado');
@@ -271,6 +272,7 @@ describe('DivergenciaService', () => {
         loteId: loteEncerrado.id,
         motivo: 'perda_confirmada',
         responsavel: 'G',
+        reconhecimentoRisco: true,
       });
 
       const agora = new Date(d3).getTime() + 2 * UM_DIA_MS;

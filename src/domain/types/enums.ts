@@ -33,3 +33,15 @@ export const MOTIVOS_FECHAMENTO = [
   'outros',
 ] as const;
 export type MotivoFechamento = (typeof MOTIVOS_FECHAMENTO)[number];
+
+// Canais pelos quais o gestor cobra a lavanderia sobre um lote em aberto.
+// Lista fechada para facilitar relatórios agrupados por canal e evitar
+// texto livre inconsistente.
+export const TIPOS_CONTATO_LAVANDERIA = [
+  'whatsapp',
+  'telefone',
+  'email',
+  'presencial',
+  'outro',
+] as const;
+export type TipoContatoLavanderia = (typeof TIPOS_CONTATO_LAVANDERIA)[number];

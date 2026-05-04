@@ -69,3 +69,7 @@ export async function validarTokenSessao(
 
 export const SESSAO_MAX_AGE_SEGUNDOS = MAX_AGE_SECONDS;
 export const COOKIE_NOME = 'admin_sessao';
+// Sessão separada do operador. Mesmo formato (HMAC issuedAt.signature),
+// mas chave HMAC é OPERADOR_PASSWORD — desacopla rotação de senha:
+// trocar ADMIN_PASSWORD não invalida sessões de operador, e vice-versa.
+export const COOKIE_NOME_OPERADOR = 'operador_sessao';

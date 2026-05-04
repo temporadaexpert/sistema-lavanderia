@@ -73,6 +73,7 @@ describe('RelatorioPerdaService', () => {
       loteId: lote.id,
       motivo: 'perda_confirmada',
       responsavel: 'Gestor',
+      reconhecimentoRisco: true,
     });
     const resumo = await c.relatorioPerda.resumo();
     expect(resumo.totalPecas).toBe(2);
@@ -94,6 +95,7 @@ describe('RelatorioPerdaService', () => {
       loteId: lote.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
     // reajusta preço para valor muito maior
     await c.itens.atualizar({ ...itemToalha(), valorUnitario: 999 });
@@ -123,6 +125,7 @@ describe('RelatorioPerdaService', () => {
       loteId: lote.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
     const resumo = await c.relatorioPerda.resumo();
     expect(resumo.totalPecas).toBe(5);
@@ -142,6 +145,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l1.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
     const l2 = await c.loteLavanderia.criarEnvio({
       origemId: TEST_LOCAIS.deposito,
@@ -153,6 +157,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l2.id,
       motivo: 'danificado',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
 
     const porMotivo = await c.relatorioPerda.porMotivo();
@@ -176,6 +181,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l1.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
     const l2 = await c.loteLavanderia.criarEnvio({
       origemId: TEST_LOCAIS.deposito,
@@ -187,6 +193,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l2.id,
       motivo: 'extravio',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
 
     const porItem = await c.relatorioPerda.porItem();
@@ -210,6 +217,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l1.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
     const porLote = await c.relatorioPerda.porLote();
     expect(porLote).toHaveLength(1);
@@ -230,6 +238,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l1.id,
       motivo: 'perda_confirmada',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
 
     c.clock.set('2026-02-15T10:00:00.000Z');
@@ -243,6 +252,7 @@ describe('RelatorioPerdaService', () => {
       loteId: l2.id,
       motivo: 'danificado',
       responsavel: 'G',
+      reconhecimentoRisco: true,
     });
 
     const mensal = await c.relatorioPerda.mensal();

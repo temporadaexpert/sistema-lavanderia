@@ -16,4 +16,6 @@ export interface LoteRepository {
   porId(id: LoteId): Promise<Lote | null>;
   porCodigo(codigo: string): Promise<Lote | null>;
   listar(filtro?: LoteFiltro): Promise<Lote[]>;
+  // Operação administrativa: zera todos os lotes.
+  limpar(): Promise<void>;
 }

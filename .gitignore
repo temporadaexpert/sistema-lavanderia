@@ -10,3 +10,7 @@ build/
 .vscode/
 .idea/
 next-env.d.ts
+
+# Dados persistidos (itens/locais do gestor). Ficam fora do git para não
+# misturar dados reais de produção com código.
+data/

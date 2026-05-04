@@ -2,7 +2,19 @@
   "permissions": {
     "allow": [
       "Bash(npm test *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(node *)",
+      "Bash(grep -rn 'href=\"/\"\\\\|href={`/`}' src/app)",
+      "Bash(mv next-env.d.ts.bak next-env.d.ts)",
+      "Bash(rm -rf .next/cache)",
+      "Bash(rm -f data/test-itens*.json data/*.tmp)",
+      "Bash(rm -f data/test-*.json data/*.tmp)",
+      "Bash(rm -f data/test-*.json)",
+      "Bash(npx vitest *)",
+      "Bash(npm install *)",
+      "Bash(awk *)",
+      "Bash(SUPABASE_TEST_OK=1 npx vitest run src/infrastructure/repositories/SupabaseCategoryRepository.test.ts)",
+      "Bash(grep *)"
     ]
   }
 }

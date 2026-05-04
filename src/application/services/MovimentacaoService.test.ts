@@ -8,10 +8,10 @@ import {
 } from '@/testing/testSeed';
 import {
   NotFoundError,
-  SaldoInsuficienteError,
+  EstoqueInsuficienteError,
   ValidationError,
 } from '@/domain/errors/DomainErrors';
-import { ItemId, LoteId } from '@/domain/types/ids';
+import { ItemId, LoteId, MovimentacaoId } from '@/domain/types/ids';
 
 describe('MovimentacaoService', () => {
   let c: ContainerDeTeste;
@@ -62,7 +62,7 @@ describe('MovimentacaoService', () => {
           destinoId: TEST_LOCAIS.imovel,
           responsavel: 'Teste',
         }),
-      ).rejects.toBeInstanceOf(SaldoInsuficienteError);
+      ).rejects.toBeInstanceOf(EstoqueInsuficienteError);
     });
 
     it('aceita envio_lavanderia apenas após entrada no depósito', async () => {
@@ -76,7 +76,7 @@ describe('MovimentacaoService', () => {
           destinoId: TEST_LOCAIS.lavanderia,
           responsavel: 'Teste',
         }),
-      ).rejects.toBeInstanceOf(SaldoInsuficienteError);
+      ).rejects.toBeInstanceOf(EstoqueInsuficienteError);
     });
   });
 
@@ -343,6 +343,186 @@ describe('MovimentacaoService', () => {
 
       const persistida = (await c.movimentacoes.listar()).find((m) => m.id === mov1.id);
       expect(persistida?.precoUnitarioSnapshot).toBe(30);
+    });
+  });
+
+  describe('cancelamento', () => {
+    it('cancela entrada_deposito e tira do saldo', async () => {
+      const mov = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 50,
+        tipo: 'entrada_deposito',
+        origemId: null,
+        destinoId: TEST_LOCAIS.deposito,
+        responsavel: 'Ana',
+      });
+      expect(await c.saldoService.saldoDe(TEST_ITENS.toalha, TEST_LOCAIS.deposito)).toBe(50);
+
+      await c.movimentacaoService.cancelar({
+        id: mov.id,
+        motivo: 'Contei errado, eram 30',
+        responsavel: 'Gestor',
+      });
+
+      // Saldo reverte — canceladas ficam fora da projeção por padrão
+      expect(await c.saldoService.saldoDe(TEST_ITENS.toalha, TEST_LOCAIS.deposito)).toBe(0);
+    });
+
+    it('persiste metadados do cancelamento na movimentação', async () => {
+      const mov = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 10,
+        tipo: 'entrada_deposito',
+        origemId: null,
+        destinoId: TEST_LOCAIS.deposito,
+        responsavel: 'Ana',
+      });
+      c.clock.set('2026-05-01T14:30:00.000Z');
+      await c.movimentacaoService.cancelar({
+        id: mov.id,
+        motivo: 'Duplicado',
+        responsavel: 'Gestor',
+      });
+      const todas = await c.movimentacoes.listar({ incluirCanceladas: true });
+      const cancelada = todas.find((m) => m.id === mov.id);
+      expect(cancelada?.cancelada).toBe(true);
+      expect(cancelada?.canceladoPor).toBe('Gestor');
+      expect(cancelada?.motivoCancelamento).toBe('Duplicado');
+      expect(cancelada?.canceladoEm).toBe('2026-05-01T14:30:00.000Z');
+      // Campos originais intactos
+      expect(cancelada?.tipo).toBe('entrada_deposito');
+      expect(cancelada?.quantidade).toBe(10);
+      expect(cancelada?.responsavel).toBe('Ana');
+    });
+
+    it('listar() exclui canceladas por padrão', async () => {
+      const mov = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 10,
+        tipo: 'entrada_deposito',
+        origemId: null,
+        destinoId: TEST_LOCAIS.deposito,
+        responsavel: 'Ana',
+      });
+      await c.movimentacaoService.cancelar({
+        id: mov.id,
+        motivo: 'Erro',
+        responsavel: 'Gestor',
+      });
+      const projecao = await c.movimentacoes.listar();
+      expect(projecao.find((m) => m.id === mov.id)).toBeUndefined();
+
+      const auditoria = await c.movimentacoes.listar({ incluirCanceladas: true });
+      expect(auditoria.find((m) => m.id === mov.id)).toBeDefined();
+    });
+
+    it('rejeita motivo vazio', async () => {
+      const mov = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 10,
+        tipo: 'entrada_deposito',
+        origemId: null,
+        destinoId: TEST_LOCAIS.deposito,
+        responsavel: 'Ana',
+      });
+      await expect(
+        c.movimentacaoService.cancelar({ id: mov.id, motivo: '  ', responsavel: 'G' }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejeita cancelar duas vezes', async () => {
+      const mov = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 10,
+        tipo: 'entrada_deposito',
+        origemId: null,
+        destinoId: TEST_LOCAIS.deposito,
+        responsavel: 'Ana',
+      });
+      await c.movimentacaoService.cancelar({
+        id: mov.id,
+        motivo: 'Erro',
+        responsavel: 'G',
+      });
+      await expect(
+        c.movimentacaoService.cancelar({
+          id: mov.id,
+          motivo: 'De novo',
+          responsavel: 'G',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejeita cancelar envio_lavanderia (ligado a lote)', async () => {
+      await entradaBase(c, 50);
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 20 }],
+      });
+      const envios = await c.movimentacoes.listar({ loteId: lote.id, tipo: 'envio_lavanderia' });
+      const envio = envios[0]!;
+      await expect(
+        c.movimentacaoService.cancelar({
+          id: envio.id,
+          motivo: 'erro',
+          responsavel: 'G',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('rejeita cancelar ajuste vinculado a lote (encerramento)', async () => {
+      await entradaBase(c, 50);
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 10 }],
+      });
+      await c.loteLavanderia.encerrarComPendencia({
+        loteId: lote.id,
+        motivo: 'perda_confirmada',
+        responsavel: 'G',
+        reconhecimentoRisco: true,
+      });
+      const ajustes = await c.movimentacoes.listar({ tipo: 'ajuste', loteId: lote.id });
+      const ajuste = ajustes[0]!;
+      await expect(
+        c.movimentacaoService.cancelar({
+          id: ajuste.id,
+          motivo: 'errei',
+          responsavel: 'G',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('permite cancelar ajuste manual (sem lote)', async () => {
+      await entradaBase(c, 30);
+      const ajuste = await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 5,
+        tipo: 'ajuste',
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: null,
+        responsavel: 'Ana',
+      });
+      await c.movimentacaoService.cancelar({
+        id: ajuste.id,
+        motivo: 'Errei a contagem',
+        responsavel: 'Gestor',
+      });
+      expect(await c.saldoService.saldoDe(TEST_ITENS.toalha, TEST_LOCAIS.deposito)).toBe(30);
+    });
+
+    it('rejeita cancelar movimentação inexistente', async () => {
+      await expect(
+        c.movimentacaoService.cancelar({
+          id: MovimentacaoId('nao-existe'),
+          motivo: 'erro',
+          responsavel: 'G',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 });

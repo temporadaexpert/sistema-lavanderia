@@ -1,0 +1,335 @@
+.main {
+  max-width: 960px;
+  padding: 20px 24px 40px;
+}
+
+.header {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.titulo {
+  margin: 10px 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.subtitulo {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+/* ---------- Resumo ---------- */
+
+.resumoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.resumoCard {
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.resumoLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.resumoValor {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.resumoAlerta {
+  background: var(--danger-soft);
+  border-color: #f5a79c;
+}
+
+.resumoAlerta .resumoValor {
+  color: var(--danger);
+}
+
+.parcialMark {
+  font-size: 14px;
+  color: var(--warn);
+  font-weight: 700;
+  vertical-align: super;
+}
+
+.avisoParcial {
+  padding: 12px 14px;
+  background: var(--warn-soft);
+  border: 1px solid #fadf8a;
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius);
+  color: #7a5500;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.avisoParcial a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* ---------- Vazio ---------- */
+
+.vazio {
+  padding: 40px 24px;
+  text-align: center;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.vazioIcone {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--success-soft);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.vazioTitulo {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.vazioSub {
+  margin: 0 auto;
+  max-width: 420px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ---------- Lista de dias ---------- */
+
+.lista {
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  padding: 16px 18px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cardData {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.cardStatus {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 10px;
+}
+
+.statusAberto {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.statusFechado {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.statusDivergencia {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.cardValores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cardMetricaPrincipal {
+  display: flex;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.cardFaltante {
+  color: var(--danger);
+}
+
+.cardExcedente {
+  color: var(--warn);
+}
+
+.cardValor {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--danger);
+}
+
+/* ---------- Lista de itens ---------- */
+
+.itensLista {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.itemLinha {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  background: #fafbfc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13.5px;
+}
+
+.itemNome {
+  font-weight: 500;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.itemMetricas {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.itemFaltante {
+  color: var(--danger);
+  font-weight: 700;
+  min-width: 42px;
+  text-align: right;
+}
+
+.itemExcedente {
+  color: var(--warn);
+  font-weight: 700;
+  min-width: 42px;
+  text-align: right;
+}
+
+.itemValor {
+  min-width: 90px;
+  text-align: right;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.muted {
+  color: var(--text-subtle);
+  font-weight: 400;
+  font-size: 12px;
+  font-style: italic;
+}
+
+/* ---------- Motivo ---------- */
+
+.motivoBox {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #fffdf5;
+  border: 1px solid #fadf8a;
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius);
+}
+
+.motivoLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a5500;
+  margin-bottom: 4px;
+}
+
+.motivoTexto {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.motivoMeta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.avisoAberto {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--ink-soft);
+  border-radius: var(--radius);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: center;
+}

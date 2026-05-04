@@ -14,6 +14,13 @@ import { RelatorioPerdaService } from '@/application/services/RelatorioPerdaServ
 import { ItemService } from '@/application/services/ItemService';
 import { LocalService } from '@/application/services/LocalService';
 import { DivergenciaService } from '@/application/services/DivergenciaService';
+import { ContatoLavanderiaService } from '@/application/services/ContatoLavanderiaService';
+import { InMemoryContatoLavanderiaRepository } from '@/infrastructure/repositories/InMemoryContatoLavanderiaRepository';
+import { ControleDiarioService } from '@/application/services/ControleDiarioService';
+import { InMemoryControleDiarioRepository } from '@/infrastructure/repositories/InMemoryControleDiarioRepository';
+import { ResetOperacionalService } from '@/application/services/ResetOperacionalService';
+import { CategoryService } from '@/application/services/CategoryService';
+import { InMemoryCategoryRepository } from '@/infrastructure/repositories/InMemoryCategoryRepository';
 
 // Clock controlável — permite testar cenários que dependem de data sem
 // usar timers reais. set() move o tempo para qualquer ponto; tests de
@@ -52,7 +59,7 @@ export function criarContainerDeTeste(
   const lotes = new InMemoryLoteRepository();
   const clock = new FakeClock(new Date(agoraInicial));
   const idGen = new SequentialIdGen();
-  const saldoService = new SaldoService(movimentacoes);
+  const saldoService = new SaldoService(movimentacoes, itens);
   const movimentacaoService = new MovimentacaoService(
     itens,
     locais,
@@ -63,6 +70,14 @@ export function criarContainerDeTeste(
   );
   const relatorioLavanderia = new RelatorioLavanderiaService(movimentacoes, itens);
   const relatorioPerda = new RelatorioPerdaService(lotes, movimentacoes, itens);
+  const divergenciaService = new DivergenciaService(lotes, itens, movimentacoes);
+  const contatosLavanderia = new InMemoryContatoLavanderiaRepository();
+  const contatoLavanderiaService = new ContatoLavanderiaService(
+    contatosLavanderia,
+    lotes,
+    idGen,
+    clock,
+  );
   const loteLavanderia = new LoteLavanderiaService(
     lotes,
     itens,
@@ -72,10 +87,28 @@ export function criarContainerDeTeste(
     saldoService,
     idGen,
     clock,
+    divergenciaService,
+    contatoLavanderiaService,
   );
-  const itemService = new ItemService(itens, idGen, clock);
+  const categorias = new InMemoryCategoryRepository();
+  const categoryService = new CategoryService(categorias, idGen, clock);
+  const itemService = new ItemService(itens, categorias, idGen, clock);
   const localService = new LocalService(locais, idGen, clock);
-  const divergenciaService = new DivergenciaService(lotes, itens, movimentacoes);
+  const controlesDiarios = new InMemoryControleDiarioRepository();
+  const controleDiario = new ControleDiarioService(
+    controlesDiarios,
+    itens,
+    idGen,
+    clock,
+  );
+  const resetOperacional = new ResetOperacionalService(
+    movimentacoes,
+    lotes,
+    contatosLavanderia,
+    controlesDiarios,
+    itens,
+    locais,
+  );
 
   return {
     itens,
@@ -92,6 +125,13 @@ export function criarContainerDeTeste(
     itemService,
     localService,
     divergenciaService,
+    contatosLavanderia,
+    contatoLavanderiaService,
+    controlesDiarios,
+    controleDiario,
+    resetOperacional,
+    categorias,
+    categoryService,
   };
 }
 

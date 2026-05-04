@@ -35,7 +35,7 @@ export default function LoginPage({ searchParams }: Props) {
           <h1>Área administrativa</h1>
           <p className={styles.subtitulo}>
             Restrito ao gestor. Para registrar operação do dia a dia, acesse a{' '}
-            <Link href="/" className={styles.linkOperacao}>
+            <Link href="/operacao" className={styles.linkOperacao}>
               tela operacional
             </Link>
             .

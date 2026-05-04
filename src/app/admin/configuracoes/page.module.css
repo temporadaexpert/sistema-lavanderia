@@ -1,0 +1,77 @@
+.main {
+  max-width: 860px;
+  padding: 20px 24px 40px;
+}
+
+.header {
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.titulo {
+  margin: 10px 0 2px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  max-width: 640px;
+}
+
+.secao {
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.secaoDanger {
+  border-color: #f5a79c;
+  background: #fff9f8;
+}
+
+.secaoHeader {
+  margin-bottom: 12px;
+}
+
+.secaoTitulo {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.secaoTituloDanger {
+  color: var(--danger);
+}
+
+.secaoSub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.lista {
+  margin: 8px 0 12px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}

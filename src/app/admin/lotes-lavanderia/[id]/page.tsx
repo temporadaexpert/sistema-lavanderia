@@ -1,13 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { detalheLote } from '@/app/_lib/loteData';
-import { divergenciaPorLote } from '@/app/_lib/divergenciaData';
+import { detalheLote, avaliarRiscoLote } from '@/app/_lib/loteData';
+import { divergenciaPorLoteComContato } from '@/app/_lib/divergenciaData';
+import { contatosPorLote } from '@/app/_lib/contatoData';
 import { MOTIVO_LABEL } from '@/app/_lib/motivos';
 import { EncerrarLoteDialog } from '@/app/_components/EncerrarLoteDialog';
+import { RegistrarContatoDialog } from '@/app/_components/RegistrarContatoDialog';
 import { LoteId } from '@/domain/types/ids';
 import type {
   LoteStatus,
   MovimentacaoTipo,
+  TipoContatoLavanderia,
 } from '@/domain/types/enums';
 import type {
   PrioridadeDivergencia,
@@ -97,15 +100,39 @@ const RECOMENDACAO_DETALHE: Record<RecomendacaoAcao, string> = {
     'Houve retorno maior que o envio registrado. Revise as movimentações desse lote e verifique se algum lançamento ficou duplicado ou fora do lote certo.',
 };
 
+const TIPO_CONTATO_LABEL: Record<TipoContatoLavanderia, string> = {
+  whatsapp: 'WhatsApp',
+  telefone: 'Telefone',
+  email: 'E-mail',
+  presencial: 'Presencial',
+  outro: 'Outro',
+};
+
+const TIPO_CONTATO_CLASS: Record<TipoContatoLavanderia, string> = {
+  whatsapp: 'chipWhatsapp',
+  telefone: 'chipTelefone',
+  email: 'chipEmail',
+  presencial: 'chipPresencial',
+  outro: 'chipOutro',
+};
+
+function formatarPromessa(iso: string): string {
+  const ymd = iso.slice(0, 10);
+  const [ano, mes, dia] = ymd.split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
 interface PageProps {
   params: { id: string };
 }
 
 export default async function LoteDetalhe({ params }: PageProps) {
   const loteId = LoteId(params.id);
-  const [detalhe, divergencia] = await Promise.all([
+  const [detalhe, divergencia, contatos, risco] = await Promise.all([
     detalheLote(loteId),
-    divergenciaPorLote(loteId),
+    divergenciaPorLoteComContato(loteId),
+    contatosPorLote(loteId),
+    avaliarRiscoLote(loteId),
   ]);
   if (!detalhe) notFound();
 
@@ -134,6 +161,14 @@ export default async function LoteDetalhe({ params }: PageProps) {
         <div className={styles.headerNav}>
           <Link href="/admin/lotes-lavanderia" className={styles.voltar}>
             ← Lotes
+          </Link>
+          <Link
+            href={`/romaneio/lavanderia/${lote.id}`}
+            className={styles.linkRomaneio}
+            target="_blank"
+            rel="noopener"
+          >
+            🖨 Imprimir romaneio
           </Link>
         </div>
         <div className={styles.headerTop}>
@@ -186,6 +221,29 @@ export default async function LoteDetalhe({ params }: PageProps) {
         </div>
       )}
 
+      {divergencia?.estatisticaContato.promessaVencida && (
+        <div className={styles.bannerPromessaVencida} role="alert">
+          <div className={styles.bannerVencidaTopo}>
+            <span className={styles.seloVencidaGrande}>PROMESSA VENCIDA</span>
+            <span className={styles.bannerVencidaResumo}>
+              há <strong>{divergencia.estatisticaContato.diasAtrasoPromessa} dia(s)</strong>
+              {divergencia.estatisticaContato.dataPromessaVencida && (
+                <>
+                  {' '}· prometida para{' '}
+                  <strong>
+                    {formatarPromessa(divergencia.estatisticaContato.dataPromessaVencida)}
+                  </strong>
+                </>
+              )}
+            </span>
+          </div>
+          <p className={styles.bannerVencidaRecomendacao}>
+            <strong>Cobrar imediatamente</strong> e considerar baixa se não houver retorno
+            iminente. A lavanderia não cumpriu o prazo combinado.
+          </p>
+        </div>
+      )}
+
       {mostrarPrioridade && divergencia && (
         <div
           className={`${styles.prioBanner} ${styles[`prio_${divergencia.prioridade}`] ?? ''}`}
@@ -227,6 +285,40 @@ export default async function LoteDetalhe({ params }: PageProps) {
               <p className={styles.recomendacaoDetalhe}>
                 {RECOMENDACAO_DETALHE[divergencia.recomendacao]}
               </p>
+
+              {/* Situação atual da cobrança + ação rápida */}
+              <div className={styles.cobrancaStatus}>
+                {divergencia.estatisticaContato.nuncaCobrado ? (
+                  <span className={styles.cobrancaAlerta}>
+                    Nenhuma cobrança registrada ainda.
+                  </span>
+                ) : (
+                  <span className={styles.cobrancaInfo}>
+                    Última cobrança há{' '}
+                    <strong>
+                      {divergencia.estatisticaContato.diasDesdeUltimoContato} dia(s)
+                    </strong>{' '}
+                    por{' '}
+                    {divergencia.estatisticaContato.ultimo &&
+                      TIPO_CONTATO_LABEL[divergencia.estatisticaContato.ultimo.tipo]}
+                    {divergencia.estatisticaContato.promessaRetornoProxima && (
+                      <>
+                        {' '}· promessa:{' '}
+                        <strong>
+                          {formatarPromessa(
+                            divergencia.estatisticaContato.promessaRetornoProxima,
+                          )}
+                        </strong>
+                      </>
+                    )}
+                  </span>
+                )}
+                <RegistrarContatoDialog
+                  loteId={lote.id}
+                  loteCodigo={lote.codigo}
+                  tamanhoBotao="pequeno"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -253,6 +345,7 @@ export default async function LoteDetalhe({ params }: PageProps) {
               loteCodigo={lote.codigo}
               pendenciaEfetiva={detalhe.pendenciaEfetiva}
               possuiDivergencia={detalhe.possuiDivergencia}
+              risco={risco}
             />
           )}
         </div>
@@ -411,11 +504,72 @@ export default async function LoteDetalhe({ params }: PageProps) {
         </div>
         {!detalhe.encerrado && detalhe.pendenciaEfetiva > 0 && (
           <p className={styles.dica}>
-            Para receber o que ainda falta, volte para a <Link href="/">tela operacional</Link> e
+            Para receber o que ainda falta, volte para a <Link href="/operacao/acao/receber-lavanderia">tela de receber da lavanderia</Link> e
             escolha <strong>Receber da lavanderia</strong>; esse lote aparecerá com a pendência
             pré-preenchida. Se a pendência não vai mais retornar, use <strong>Encerrar lote</strong>
             {' '}acima para registrar a baixa com motivo.
           </p>
+        )}
+      </section>
+
+      <section className={styles.secao}>
+        <div className={styles.secaoHeaderFlex}>
+          <div>
+            <h2>Histórico de cobranças</h2>
+            <p className={styles.secaoSub}>
+              {contatos.length === 0
+                ? 'Nenhuma cobrança registrada para este lote.'
+                : `${contatos.length} registro(s) · ordem do mais recente ao mais antigo.`}
+            </p>
+          </div>
+          {!detalhe.encerrado && (
+            <RegistrarContatoDialog
+              loteId={lote.id}
+              loteCodigo={lote.codigo}
+              tamanhoBotao="primario"
+            />
+          )}
+        </div>
+
+        {contatos.length === 0 ? (
+          <div className={styles.vazio}>
+            Nenhuma cobrança registrada. Quando entrar em contato com a lavanderia sobre este
+            lote, use <strong>Registrar cobrança</strong> para deixar rastro — ajuda a escalar
+            corretamente a decisão quando o lote ficar crítico.
+          </div>
+        ) : (
+          <ol className={styles.timeline}>
+            {contatos.map((c) => (
+              <li key={c.id} className={styles.timelineItem}>
+                <div className={styles.timelineTopo}>
+                  <span
+                    className={`${styles.tipoChip} ${styles[TIPO_CONTATO_CLASS[c.tipo]] ?? ''}`}
+                  >
+                    {TIPO_CONTATO_LABEL[c.tipo]}
+                  </span>
+                  <span className={styles.timelineData}>
+                    {fmtDataHora.format(new Date(c.dataHora))} · por {c.responsavel}
+                  </span>
+                </div>
+                {c.observacao && (
+                  <p className={styles.timelineObservacao}>{c.observacao}</p>
+                )}
+                <div className={styles.timelineMeta}>
+                  {c.promessaRetornoData && (
+                    <span className={styles.timelinePromessa}>
+                      Promessa de retorno:{' '}
+                      <strong>{formatarPromessa(c.promessaRetornoData)}</strong>
+                    </span>
+                  )}
+                  {c.proximaAcao && (
+                    <span className={styles.timelineProxima}>
+                      Próxima ação: {c.proximaAcao}
+                    </span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 

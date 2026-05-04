@@ -1,7 +1,7 @@
 'use server';
 
 import { getContainer } from '@/infrastructure/singleton';
-import { ItemId } from '@/domain/types/ids';
+import { CategoryId, ItemId } from '@/domain/types/ids';
 import { DomainError } from '@/domain/errors/DomainErrors';
 
 export type AcaoResultado =
@@ -44,19 +44,21 @@ class ValidationFromAction extends Error {
 
 function coletarInput(formData: FormData): {
   nome: string;
-  categoria: string;
+  categoriaId: string;
   unidade: string;
   valorUnitario: number | null;
   estoqueMinimo: number | null;
+  estoqueTotal: number | null;
   ativo: boolean;
 } {
   const nome = String(formData.get('nome') ?? '');
-  const categoria = String(formData.get('categoria') ?? '');
+  const categoriaId = String(formData.get('categoriaId') ?? '');
   const unidade = String(formData.get('unidade') ?? '');
   const valorUnitario = parseDecimal(formData.get('valorUnitario'), 'Valor unitário');
   const estoqueMinimo = parseInteger(formData.get('estoqueMinimo'), 'Estoque mínimo');
+  const estoqueTotal = parseInteger(formData.get('estoqueTotal'), 'Estoque total');
   const ativo = formData.get('ativo') === 'on' || formData.get('ativo') === 'true';
-  return { nome, categoria, unidade, valorUnitario, estoqueMinimo, ativo };
+  return { nome, categoriaId, unidade, valorUnitario, estoqueMinimo, estoqueTotal, ativo };
 }
 
 export async function criarMaterialAction(formData: FormData): Promise<AcaoResultado> {
@@ -65,10 +67,11 @@ export async function criarMaterialAction(formData: FormData): Promise<AcaoResul
     const c = await getContainer();
     const item = await c.itemService.criar({
       nome: input.nome,
-      categoria: input.categoria,
+      categoriaId: CategoryId(input.categoriaId),
       unidade: input.unidade,
       valorUnitario: input.valorUnitario,
       estoqueMinimo: input.estoqueMinimo,
+      estoqueTotal: input.estoqueTotal,
       ativo: input.ativo,
     });
     return { ok: true, mensagem: `Material "${item.nome}" cadastrado.` };
@@ -87,10 +90,11 @@ export async function atualizarMaterialAction(formData: FormData): Promise<AcaoR
     const c = await getContainer();
     const item = await c.itemService.atualizar(ItemId(idRaw), {
       nome: input.nome,
-      categoria: input.categoria,
+      categoriaId: CategoryId(input.categoriaId),
       unidade: input.unidade,
       valorUnitario: input.valorUnitario,
       estoqueMinimo: input.estoqueMinimo,
+      estoqueTotal: input.estoqueTotal,
       ativo: input.ativo,
     });
     return { ok: true, mensagem: `Material "${item.nome}" atualizado.` };

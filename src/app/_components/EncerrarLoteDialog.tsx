@@ -6,11 +6,24 @@ import { MOTIVOS_FECHAMENTO, type MotivoFechamento } from '@/domain/types/enums'
 import { encerrarLoteAction, type AcaoResultado } from '../_lib/actions';
 import styles from './EncerrarLoteDialog.module.css';
 
+interface RiscoView {
+  temRisco: boolean;
+  nuncaCobrado: boolean;
+  promessaVencida: boolean;
+  diasAtrasoPromessa: number | null;
+  valorPendenteAlto: boolean;
+  valorPendente: number;
+  pendenciaAntiga: boolean;
+  diasDesdeEnvio: number;
+  motivos: readonly string[];
+}
+
 interface Props {
   loteId: string;
   loteCodigo: string;
   pendenciaEfetiva: number;
   possuiDivergencia: boolean;
+  risco: RiscoView | null;
 }
 
 const LABEL_MOTIVO: Record<MotivoFechamento, string> = {
@@ -34,16 +47,21 @@ export function EncerrarLoteDialog({
   loteCodigo,
   pendenciaEfetiva,
   possuiDivergencia,
+  risco,
 }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [motivo, setMotivo] = useState<MotivoFechamento | ''>('');
+  const [reconheceRisco, setReconheceRisco] = useState(false);
   const [resultado, setResultado] = useState<AcaoResultado | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  const exigeReconhecimento = risco?.temRisco === true;
+
   function abrir() {
     setResultado(null);
     setMotivo('');
+    setReconheceRisco(false);
     dialogRef.current?.showModal();
   }
 
@@ -106,6 +124,57 @@ export function EncerrarLoteDialog({
               </>
             )}
           </div>
+
+          {exigeReconhecimento && risco && (
+            <div className={styles.riscoBloco} role="alert">
+              <div className={styles.riscoTitulo}>
+                <span aria-hidden>⚠</span> Baixa de alto risco
+              </div>
+              <p className={styles.riscoTexto}>
+                Antes de encerrar, revise os sinais abaixo — baixas precipitadas podem esconder
+                peças que a lavanderia ainda devolveria.
+              </p>
+              <ul className={styles.riscoLista}>
+                {risco.nuncaCobrado && (
+                  <li>
+                    <strong>Nunca cobrado:</strong> nenhum contato foi registrado com a
+                    lavanderia sobre este lote.
+                  </li>
+                )}
+                {risco.promessaVencida && (
+                  <li>
+                    <strong>Promessa vencida:</strong> a lavanderia prometeu retorno e está
+                    atrasada há {risco.diasAtrasoPromessa ?? 0} dia(s).
+                  </li>
+                )}
+                {risco.valorPendenteAlto && (
+                  <li>
+                    <strong>Valor alto:</strong> pendência estimada em R${' '}
+                    {risco.valorPendente.toFixed(2)}.
+                  </li>
+                )}
+                {risco.pendenciaAntiga && (
+                  <li>
+                    <strong>Pendência antiga:</strong> o envio saiu há {risco.diasDesdeEnvio}{' '}
+                    dia(s).
+                  </li>
+                )}
+              </ul>
+              <label className={styles.riscoCheck}>
+                <input
+                  type="checkbox"
+                  name="reconhecimentoRisco"
+                  checked={reconheceRisco}
+                  onChange={(e) => setReconheceRisco(e.target.checked)}
+                  required
+                />
+                <span>
+                  Confirmo que revi os sinais acima e desejo encerrar o lote mesmo assim. A
+                  decisão fica registrada no histórico.
+                </span>
+              </label>
+            </div>
+          )}
 
           <div className={styles.field}>
             <label className={styles.label} htmlFor="motivo">
@@ -179,7 +248,11 @@ export function EncerrarLoteDialog({
             >
               Cancelar
             </button>
-            <button type="submit" className={styles.botaoPrimario} disabled={loading || !motivo}>
+            <button
+              type="submit"
+              className={styles.botaoPrimario}
+              disabled={loading || !motivo || (exigeReconhecimento && !reconheceRisco)}
+            >
               {loading ? 'Encerrando…' : 'Confirmar encerramento'}
             </button>
           </div>

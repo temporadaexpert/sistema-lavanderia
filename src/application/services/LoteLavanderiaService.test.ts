@@ -3,7 +3,7 @@ import { criarContainerDeTeste, type ContainerDeTeste } from '@/testing/testCont
 import { semearBasico, TEST_ITENS, TEST_LOCAIS } from '@/testing/testSeed';
 import {
   NotFoundError,
-  SaldoInsuficienteError,
+  EstoqueInsuficienteError,
   ValidationError,
 } from '@/domain/errors/DomainErrors';
 import { LoteId } from '@/domain/types/ids';
@@ -85,7 +85,7 @@ describe('LoteLavanderiaService', () => {
           responsavel: 'Ana',
           itens: [{ itemId: TEST_ITENS.toalha, quantidade: 200 }],
         }),
-      ).rejects.toBeInstanceOf(SaldoInsuficienteError);
+      ).rejects.toBeInstanceOf(EstoqueInsuficienteError);
 
       expect(await c.lotes.listar()).toHaveLength(0);
       expect(await c.movimentacoes.listar({ tipo: 'envio_lavanderia' })).toHaveLength(0);
@@ -181,6 +181,7 @@ describe('LoteLavanderiaService', () => {
         loteId: lote.id,
         motivo: 'perda_confirmada',
         responsavel: 'Gestor',
+        reconhecimentoRisco: true,
       });
       await expect(
         c.loteLavanderia.registrarRetorno({
@@ -280,6 +281,7 @@ describe('LoteLavanderiaService', () => {
         loteId: encerrado.id,
         motivo: 'perda_confirmada',
         responsavel: 'G',
+        reconhecimentoRisco: true,
       });
 
       const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
@@ -310,6 +312,7 @@ describe('LoteLavanderiaService', () => {
         loteId: lote.id,
         motivo: 'perda_confirmada',
         responsavel: 'Gestor',
+        reconhecimentoRisco: true,
       });
 
       const detalhe = await c.loteLavanderia.detalhe(lote.id);
@@ -346,10 +349,14 @@ describe('LoteLavanderiaService', () => {
         motivo: 'outros',
         motivoDescricao: 'caiu do caminhão',
         responsavel: 'Gestor',
+        reconhecimentoRisco: true,
       });
       const detalhe = await c.loteLavanderia.detalhe(lote.id);
       expect(detalhe?.lote.motivoFechamento).toBe('outros');
-      expect(detalhe?.lote.motivoDescricao).toBe('caiu do caminhão');
+      // Descrição mantém o texto original e ganha sufixo com os motivos
+      // de risco reconhecidos — auditabilidade no próprio cabeçalho.
+      expect(detalhe?.lote.motivoDescricao).toContain('caiu do caminhão');
+      expect(detalhe?.lote.motivoDescricao).toContain('encerrado com ciência de risco');
       expect(detalhe?.lote.encerradoPor).toBe('Gestor');
       expect(detalhe?.lote.encerradoEm).toBeTruthy();
     });
@@ -386,12 +393,14 @@ describe('LoteLavanderiaService', () => {
         loteId: lote.id,
         motivo: 'perda_confirmada',
         responsavel: 'G',
+        reconhecimentoRisco: true,
       });
       await expect(
         c.loteLavanderia.encerrarComPendencia({
           loteId: lote.id,
           motivo: 'danificado',
           responsavel: 'G',
+          reconhecimentoRisco: true,
         }),
       ).rejects.toBeInstanceOf(ValidationError);
     });
@@ -410,6 +419,163 @@ describe('LoteLavanderiaService', () => {
           responsavel: 'G',
         }),
       ).rejects.toBeInstanceOf(ValidationError);
+    });
+  });
+
+  describe('confirmação de risco no encerramento', () => {
+    it('rejeita encerrar lote nunca cobrado sem reconhecimentoRisco', async () => {
+      // Lote com 5 toalhas (R$150), recente (0 dias). Único risco: nunca cobrado.
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await expect(
+        c.loteLavanderia.encerrarComPendencia({
+          loteId: lote.id,
+          motivo: 'perda_confirmada',
+          responsavel: 'G',
+          // reconhecimentoRisco ausente
+        }),
+      ).rejects.toThrow(/confirmação de risco/i);
+    });
+
+    it('permite encerrar lote nunca cobrado quando reconhecimentoRisco=true', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.encerrarComPendencia({
+        loteId: lote.id,
+        motivo: 'perda_confirmada',
+        responsavel: 'G',
+        reconhecimentoRisco: true,
+      });
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe?.status).toBe('encerrado_com_pendencia');
+      expect(detalhe?.lote.motivoDescricao).toContain('encerrado com ciência de risco');
+      expect(detalhe?.lote.motivoDescricao).toContain('nunca cobrado');
+    });
+
+    it('rejeita encerrar lote com promessa vencida sem reconhecimentoRisco', async () => {
+      const dataEnvio = '2026-01-05T10:00:00.000Z';
+      c.clock.set(dataEnvio);
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      c.clock.set('2026-01-08T10:00:00.000Z');
+      await c.contatoLavanderiaService.registrar({
+        loteId: lote.id,
+        tipo: 'whatsapp',
+        responsavel: 'G',
+        promessaRetornoData: '2026-01-10',
+      });
+      // hoje já passou da promessa
+      c.clock.set('2026-01-15T10:00:00.000Z');
+
+      await expect(
+        c.loteLavanderia.encerrarComPendencia({
+          loteId: lote.id,
+          motivo: 'perda_confirmada',
+          responsavel: 'G',
+        }),
+      ).rejects.toThrow(/confirmação de risco/i);
+    });
+
+    it('permite encerrar lote com promessa vencida quando reconhecimentoRisco=true', async () => {
+      c.clock.set('2026-01-05T10:00:00.000Z');
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      c.clock.set('2026-01-08T10:00:00.000Z');
+      await c.contatoLavanderiaService.registrar({
+        loteId: lote.id,
+        tipo: 'whatsapp',
+        responsavel: 'G',
+        promessaRetornoData: '2026-01-10',
+      });
+      c.clock.set('2026-01-15T10:00:00.000Z');
+      await c.loteLavanderia.encerrarComPendencia({
+        loteId: lote.id,
+        motivo: 'perda_confirmada',
+        responsavel: 'G',
+        reconhecimentoRisco: true,
+      });
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe?.status).toBe('encerrado_com_pendencia');
+      expect(detalhe?.lote.motivoDescricao).toContain('promessa vencida');
+    });
+
+    it('lote sem risco encerra normalmente mesmo sem reconhecimentoRisco', async () => {
+      // Cenário "limpo": lote recente (0 dias), valor baixo (1 toalha R$30),
+      // já cobrado (tem contato sem promessa). Nenhum critério de risco.
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 1 }],
+      });
+      await c.contatoLavanderiaService.registrar({
+        loteId: lote.id,
+        tipo: 'whatsapp',
+        responsavel: 'G',
+      });
+      await c.loteLavanderia.encerrarComPendencia({
+        loteId: lote.id,
+        motivo: 'danificado',
+        responsavel: 'G',
+        // sem reconhecimentoRisco — não precisa, não há risco
+      });
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe?.status).toBe('encerrado_com_pendencia');
+      // Descrição permanece nula — sem sufixo de risco.
+      expect(detalhe?.lote.motivoDescricao).toBeNull();
+    });
+
+    it('avaliarRiscoEncerramento detecta combinação de múltiplos riscos', async () => {
+      c.clock.set('2025-12-01T10:00:00.000Z');
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        // 20 × R$30 = R$600 → valor crítico
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 20 }],
+      });
+      // Avança 20 dias (> DIAS_CRITICO=14) para pendência antiga.
+      const agoraMs = new Date('2025-12-21T10:00:00.000Z').getTime();
+
+      const risco = await c.loteLavanderia.avaliarRiscoEncerramento(lote.id, agoraMs);
+      expect(risco.temRisco).toBe(true);
+      expect(risco.nuncaCobrado).toBe(true);
+      expect(risco.valorPendenteAlto).toBe(true);
+      expect(risco.pendenciaAntiga).toBe(true);
+      expect(risco.motivos.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('avaliarRiscoEncerramento: lote sem risco retorna temRisco=false', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 1 }],
+      });
+      await c.contatoLavanderiaService.registrar({
+        loteId: lote.id,
+        tipo: 'whatsapp',
+        responsavel: 'G',
+      });
+      const risco = await c.loteLavanderia.avaliarRiscoEncerramento(lote.id);
+      expect(risco.temRisco).toBe(false);
+      expect(risco.motivos).toHaveLength(0);
     });
   });
 });

@@ -1,0 +1,107 @@
+.main {
+  min-height: calc(100vh - 70px);
+  background: var(--bg);
+  padding: 16px 16px 48px;
+}
+
+.container {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+/* ---------- Hero identificando a ação ---------- */
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.heroIcone {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.heroTitulo {
+  margin: 0 0 2px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.heroDescricao {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.82;
+}
+
+/* Tons de categoria aplicados ao main — derivam cores para hero e form */
+
+.tonLavanderia .hero {
+  background: #f3eeff;
+  border: 1px solid #d9c9ff;
+}
+.tonLavanderia .heroIcone {
+  background: #7c3aed;
+  color: #fff;
+}
+.tonLavanderia .heroTitulo {
+  color: #4c1d95;
+}
+.tonLavanderia .heroDescricao {
+  color: #5b2cba;
+}
+
+.tonImovel .hero {
+  background: #e6f7ec;
+  border: 1px solid #b3e5c2;
+}
+.tonImovel .heroIcone {
+  background: #16a34a;
+  color: #fff;
+}
+.tonImovel .heroTitulo {
+  color: #14532d;
+}
+.tonImovel .heroDescricao {
+  color: #166534;
+}
+
+.tonDeposito .hero {
+  background: #eef0f3;
+  border: 1px solid #d4d9e0;
+}
+.tonDeposito .heroIcone {
+  background: var(--ink);
+  color: #fff;
+}
+.tonDeposito .heroTitulo {
+  color: var(--ink);
+}
+.tonDeposito .heroDescricao {
+  color: var(--ink-hover);
+}
+
+/* ---------- Card do formulário ---------- */
+
+.formCard {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 18px;
+}

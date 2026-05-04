@@ -1,5 +1,6 @@
 import { getContainer } from '@/infrastructure/singleton';
 import type { Item } from '@/domain/entities/Item';
+import type { Category } from '@/domain/entities/Category';
 
 export async function listarTodosMateriais(): Promise<Item[]> {
   const c = await getContainer();
@@ -11,12 +12,11 @@ export async function listarTodosMateriais(): Promise<Item[]> {
   });
 }
 
-export async function categoriasExistentes(): Promise<string[]> {
+// Categorias ativas cadastradas no admin — fonte estruturada do form.
+// Select no MaterialFormDialog é populado por aqui.
+export async function listarCategoriasAtivas(): Promise<Category[]> {
   const c = await getContainer();
-  const itens = await c.itens.listar();
-  const set = new Set<string>();
-  for (const i of itens) if (i.categoria) set.add(i.categoria);
-  return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return c.categorias.listar({ apenasAtivos: true });
 }
 
 export async function unidadesExistentes(): Promise<string[]> {
