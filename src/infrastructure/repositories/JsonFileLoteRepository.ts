@@ -15,7 +15,20 @@ export class JsonFileLoteRepository implements LoteRepository {
     if (this.storePromise) return this.storePromise;
     this.storePromise = (async () => {
       const registros = await this.json.carregar();
-      return new Map(registros.map((l) => [l.id, l]));
+      // Normaliza campos adicionados por migração — lotes gravados antes
+      // de `origemDivergencia` existir vêm com a chave undefined no JSON.
+      // Coerce pra null pra preservar a forma do tipo Lote.
+      return new Map(
+        registros.map((l) => [
+          l.id,
+          {
+            ...l,
+            origemDivergencia:
+              (l as { origemDivergencia?: Lote['origemDivergencia'] })
+                .origemDivergencia ?? null,
+          } as Lote,
+        ]),
+      );
     })();
     return this.storePromise;
   }

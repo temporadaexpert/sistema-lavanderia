@@ -37,6 +37,37 @@ function mascarSupabaseUrl(url: string | undefined): string {
   return `(formato inesperado: len=${url.length}, prefixo="${url.slice(0, 4)}…")`;
 }
 
+// Fingerprint da chave: primeiros 10 chars + comprimento total. Distingue
+// JWT clássico (eyJ…, ~220 chars) vs novo formato (sb_secret_…, ~41 chars)
+// vs anon key acidentalmente colada. Não expõe a chave útil pra atacante.
+function mascarKey(key: string | undefined): string {
+  if (!key) return '(unset)';
+  return `${key.slice(0, 10)}… (len=${key.length})`;
+}
+
+// Assinatura "test residue vs migração real". Se todos os locais têm tipo
+// 'deposito' ou 'lavanderia' (nenhum 'imovel'), é o seed de teste. Se há
+// dezenas de 'imovel', é a migração real (tinha 35).
+function classificarLocais(tipos: string[]): {
+  total: number;
+  deposito: number;
+  imovel: number;
+  lavanderia: number;
+  parece_residuo_de_teste: boolean;
+} {
+  const c = { deposito: 0, imovel: 0, lavanderia: 0 };
+  for (const t of tipos) {
+    if (t === 'deposito' || t === 'imovel' || t === 'lavanderia') c[t]++;
+  }
+  return {
+    total: tipos.length,
+    ...c,
+    // Heurística: residual de teste tem apenas deposito + lavanderia (1 de cada),
+    // sem nenhum imovel. Migração real tem 35 imoveis + 1 deposito + 1 lavanderia.
+    parece_residuo_de_teste: c.imovel === 0 && tipos.length <= 3,
+  };
+}
+
 export async function GET(req: NextRequest) {
   const expected = process.env.DEBUG_SECRET;
   if (!expected || expected.trim() === '') {
@@ -58,13 +89,28 @@ export async function GET(req: NextRequest) {
     c.locais.listar(),
   ]);
 
+  // "Maior criadoEm" indica quando a tabela foi populada pela última vez.
+  // Se for muito recente (horas atrás), aponta pra escrita acidental
+  // — provavelmente teste de integração rodou contra esta URL.
+  const maxCriadoEm = (rows: Array<{ criadoEm: string }>): string | null => {
+    if (rows.length === 0) return null;
+    return rows
+      .map((r) => r.criadoEm)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? null;
+  };
+
   const corpo = {
     env: {
       NODE_ENV: process.env.NODE_ENV ?? '(unset)',
       PERSISTENCE_DRIVER: process.env.PERSISTENCE_DRIVER ?? '(unset)',
       SUPABASE_URL: mascarSupabaseUrl(process.env.SUPABASE_URL),
-      // Confirma se a service-role key está presente sem expor valor.
-      SUPABASE_SERVICE_ROLE_KEY_set: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+      // Fingerprint da key (primeiros 10 chars + comprimento). Permite
+      // ao usuário cruzar com o que ele tem no .env.local.
+      SUPABASE_SERVICE_ROLE_KEY_fingerprint: mascarKey(
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+      ),
       SEED_DEMO: process.env.SEED_DEMO ?? '(unset)',
     },
     counts: {
@@ -72,9 +118,30 @@ export async function GET(req: NextRequest) {
       itens: itens.length,
       locais: locais.length,
     },
+    // Distribuição por tipo nos locais — distingue residue de teste (só
+    // deposito+lavanderia) vs migração real (35 imovel + 1 deposito + 1
+    // lavanderia).
+    locais_por_tipo: classificarLocais(locais.map((l) => l.tipo)),
     samples: {
-      itens: itens.slice(0, 10).map((i) => i.nome),
-      locais: locais.slice(0, 10).map((l) => l.nome),
+      itens: itens.slice(0, 10).map((i) => ({
+        nome: i.nome,
+        ativo: i.ativo,
+        categoria: i.categoria,
+      })),
+      locais: locais.slice(0, 10).map((l) => ({
+        nome: l.nome,
+        tipo: l.tipo,
+        ativo: l.ativo,
+      })),
+      categorias: categorias.slice(0, 10).map((c) => c.nome),
+    },
+    // Timestamp do registro mais novo em cada tabela. Útil pra detectar
+    // escrita recente (ex.: tudo populado nas últimas horas → suspeita
+    // forte de teste de integração rodando contra esta URL).
+    ultimas_escritas: {
+      categorias: maxCriadoEm(categorias),
+      itens: maxCriadoEm(itens),
+      locais: maxCriadoEm(locais),
     },
     timestamp: new Date().toISOString(),
   };

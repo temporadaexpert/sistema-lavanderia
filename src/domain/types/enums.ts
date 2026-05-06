@@ -45,3 +45,18 @@ export const TIPOS_CONTATO_LAVANDERIA = [
   'outro',
 ] as const;
 export type TipoContatoLavanderia = (typeof TIPOS_CONTATO_LAVANDERIA)[number];
+
+// Origem provável da divergência registrada quando um lote é encerrado
+// com pendência. Coletada na UI pelo operador no modal de classificação,
+// gravada no header do lote (`lotes_lavanderia.origem_divergencia`).
+//
+// Permite agrupamento em relatórios ("quanto perdemos POR culpa da
+// lavanderia este mês vs. internamente") sem texto livre. Schema tem
+// CHECK aceitando estes 4 valores ou null.
+export const ORIGENS_DIVERGENCIA = [
+  'lavanderia',
+  'imovel',
+  'operacao',
+  'desconhecida',
+] as const;
+export type OrigemDivergencia = (typeof ORIGENS_DIVERGENCIA)[number];

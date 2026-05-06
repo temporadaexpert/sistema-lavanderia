@@ -5,6 +5,7 @@ import {
   NotFoundError,
   EstoqueInsuficienteError,
   ValidationError,
+  DivergenciaDetectadaError,
 } from '@/domain/errors/DomainErrors';
 import { LoteId } from '@/domain/types/ids';
 
@@ -576,6 +577,307 @@ describe('LoteLavanderiaService', () => {
       const risco = await c.loteLavanderia.avaliarRiscoEncerramento(lote.id);
       expect(risco.temRisco).toBe(false);
       expect(risco.motivos).toHaveLength(0);
+    });
+  });
+
+  describe('registrarRetornoEFinalizar (fluxo unificado do operador)', () => {
+    async function criarLoteAberto() {
+      return c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [
+          { itemId: TEST_ITENS.toalha, quantidade: 30 },
+          { itemId: TEST_ITENS.fronha, quantidade: 20 },
+        ],
+      });
+    }
+
+    it('cenário 1: retorno completo (sem divergência) — registra e fica concluído sem fechar', async () => {
+      const lote = await criarLoteAberto();
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [
+          { itemId: TEST_ITENS.toalha, quantidade: 30 },
+          { itemId: TEST_ITENS.fronha, quantidade: 20 },
+        ],
+      });
+      expect(r.status).toBe('registrado_sem_pendencia');
+      expect(r.pendenciaResidual).toBe(0);
+      expect(r.fechado).toBe(false);
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.totalRetornado).toBe(50);
+      expect(detalhe!.pendenciaEfetiva).toBe(0);
+      expect(detalhe!.encerrado).toBe(false); // não fecha sem pendência
+    });
+
+    it('cenário 2: divergência sem classificação — lança DivergenciaDetectadaError SEM gravar', async () => {
+      const lote = await criarLoteAberto();
+      const movsAntes = await c.movimentacoes.listar({ loteId: lote.id });
+
+      let erroCapturado: unknown = null;
+      try {
+        await c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [
+            { itemId: TEST_ITENS.toalha, quantidade: 28 }, // 2 faltam
+            { itemId: TEST_ITENS.fronha, quantidade: 18 }, // 2 faltam
+          ],
+        });
+      } catch (err) {
+        erroCapturado = err;
+      }
+
+      expect(erroCapturado).toBeInstanceOf(DivergenciaDetectadaError);
+      const e = erroCapturado as DivergenciaDetectadaError;
+      expect(e.code).toBe('DIVERGENCIA_DETECTADA');
+      expect(e.divergencias).toHaveLength(2);
+      expect(e.divergencias.every((l) => l.diferenca === 2)).toBe(true);
+      // Itens nas divergências carregam dados completos pra UI
+      const toalhaDiv = e.divergencias.find((l) => l.itemId === TEST_ITENS.toalha);
+      expect(toalhaDiv?.enviado).toBe(30);
+      expect(toalhaDiv?.retornado).toBe(28); // o que VAI ficar registrado se aprovar
+      expect(toalhaDiv?.nomeItem).toBe('Toalha');
+
+      // Pré-validação: NADA foi gravado. Movimentações de retorno e ajuste
+      // ausentes — operador pode reabrir o modal e classificar sem
+      // duplicar dados.
+      const movsDepois = await c.movimentacoes.listar({ loteId: lote.id });
+      expect(movsDepois).toHaveLength(movsAntes.length);
+    });
+
+    it('cenário 3a: divergência classificada como "perda" — registra retorno + fecha como concluido_com_divergencia', async () => {
+      const lote = await criarLoteAberto();
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [
+          { itemId: TEST_ITENS.toalha, quantidade: 28 },
+          { itemId: TEST_ITENS.fronha, quantidade: 18 },
+        ],
+        classificacao: 'perda',
+        origemDivergencia: 'lavanderia',
+        responsavelFechamento: 'Gestor',
+        reconhecimentoRisco: true,
+      });
+      expect(r.status).toBe('concluido_com_divergencia');
+      expect(r.pendenciaResidual).toBe(4);
+      expect(r.fechado).toBe(true);
+
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.encerrado).toBe(true);
+      expect(detalhe!.lote.motivoFechamento).toBe('perda_confirmada');
+      expect(detalhe!.lote.encerradoPor).toBe('Gestor');
+      // Origem da divergência foi gravada no header do lote
+      expect(detalhe!.lote.origemDivergencia).toBe('lavanderia');
+      // Estoque reflete realidade: retornou 46 (28+18), 4 viraram ajuste
+      expect(detalhe!.totalRetornado).toBe(46);
+      expect(detalhe!.totalAjustado).toBe(4);
+      expect(detalhe!.pendenciaEfetiva).toBe(0);
+    });
+
+    it('cenário 3b: divergência classificada como "retorno_parcial" — registra mas NÃO fecha', async () => {
+      const lote = await criarLoteAberto();
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [
+          { itemId: TEST_ITENS.toalha, quantidade: 20 }, // 10 faltam, virão depois
+        ],
+        classificacao: 'retorno_parcial',
+      });
+      expect(r.status).toBe('registrado_parcial');
+      expect(r.pendenciaResidual).toBe(30); // 30 toalha faltando + 20 fronha
+      expect(r.fechado).toBe(false);
+
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.encerrado).toBe(false); // lote permanece aberto
+      expect(detalhe!.totalRetornado).toBe(20);
+      expect(detalhe!.pendenciaEfetiva).toBeGreaterThan(0);
+    });
+
+    it('cenário 3c: divergência classificada como "outro" SEM descrição — rejeita', async () => {
+      const lote = await criarLoteAberto();
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+          classificacao: 'outro',
+          // motivoDescricao ausente — exigida pra "outro"
+          origemDivergencia: 'lavanderia',
+          responsavelFechamento: 'Gestor',
+          reconhecimentoRisco: true,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('cenário 3d: classificação "extravio" mapeia corretamente para motivo_fechamento="extravio"', async () => {
+      const lote = await criarLoteAberto();
+      await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 28 }],
+        classificacao: 'extravio',
+        origemDivergencia: 'imovel',
+        responsavelFechamento: 'Gestor',
+        reconhecimentoRisco: true,
+      });
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.lote.motivoFechamento).toBe('extravio');
+      expect(detalhe!.lote.origemDivergencia).toBe('imovel');
+    });
+
+    it('origem da divergência: cada um dos 4 valores válidos é gravado no header', async () => {
+      // Verifica que o repository persiste fielmente cada opção do enum.
+      // Lotes pequenos (5 toalhas) pra não estourar estoque inicial em
+      // loop de 4 iterações.
+      const origens = ['lavanderia', 'imovel', 'operacao', 'desconhecida'] as const;
+      for (const origem of origens) {
+        const lote = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        });
+        await c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 4 }],
+          classificacao: 'dano',
+          origemDivergencia: origem,
+          responsavelFechamento: 'Gestor',
+          reconhecimentoRisco: true,
+        });
+        const detalhe = await c.loteLavanderia.detalhe(lote.id);
+        expect(detalhe!.lote.origemDivergencia).toBe(origem);
+      }
+    });
+
+    it('SEM origem + classificação que fecha (perda) — rejeita', async () => {
+      const lote = await criarLoteAberto();
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 28 }],
+          classificacao: 'perda',
+          // origemDivergencia ausente — obrigatória pra fechamento
+          responsavelFechamento: 'Gestor',
+          reconhecimentoRisco: true,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('SEM origem + classificação que fecha (dano/extravio/erro_operacional/outro) — rejeita pra todas', async () => {
+      const classificacoesQueFecham = [
+        'dano',
+        'extravio',
+        'erro_operacional',
+        'outro',
+      ] as const;
+      for (const classificacao of classificacoesQueFecham) {
+        // Lotes pequenos pra caber 4 iterações no estoque inicial (toalha=100).
+        const lote = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        });
+        await expect(
+          c.loteLavanderia.registrarRetornoEFinalizar({
+            loteId: lote.id,
+            responsavel: 'Bruno',
+            itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+            classificacao,
+            motivoDescricao: 'teste', // exigido pra "outro", inofensivo nas outras
+            responsavelFechamento: 'Gestor',
+            reconhecimentoRisco: true,
+          }),
+        ).rejects.toBeInstanceOf(ValidationError);
+      }
+    });
+
+    it('retorno_parcial PODE prosseguir SEM origem (lote permanece aberto)', async () => {
+      const lote = await criarLoteAberto();
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 20 }],
+        classificacao: 'retorno_parcial',
+        // origemDivergencia ausente — válido pra retorno parcial
+      });
+      expect(r.status).toBe('registrado_parcial');
+      expect(r.fechado).toBe(false);
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.lote.origemDivergencia).toBeNull();
+    });
+
+    it('valor inválido de origem é rejeitado pelo service', async () => {
+      const lote = await criarLoteAberto();
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 28 }],
+          classificacao: 'perda',
+          // Cast forçado pra simular bug de cliente que enviasse valor fora do enum
+          origemDivergencia: 'fornecedor' as never,
+          responsavelFechamento: 'Gestor',
+          reconhecimentoRisco: true,
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('lote criado por criarEnvio inicia com origemDivergencia=null', async () => {
+      // Sanity: campo é inicializado como null, não undefined.
+      const lote = await criarLoteAberto();
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.lote.origemDivergencia).toBeNull();
+    });
+
+    it('rejeita quantidade retornada maior que pendente (proteção anti-excesso)', async () => {
+      const lote = await criarLoteAberto();
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 35 }], // só 30 pendentes
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('lote já encerrado é rejeitado', async () => {
+      const lote = await criarLoteAberto();
+      await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 28 }],
+        classificacao: 'perda',
+        origemDivergencia: 'lavanderia',
+        responsavelFechamento: 'Gestor',
+        reconhecimentoRisco: true,
+      });
+      // Tentativa de re-registrar após fechado
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.fronha, quantidade: 1 }],
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('lote inexistente é rejeitado com NotFoundError', async () => {
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: LoteId('lote-fantasma'),
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 1 }],
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
 });

@@ -4,10 +4,17 @@ import type { ItemId, LocalId, LoteId } from '@/domain/types/ids';
 import { LoteId as LoteIdCtor } from '@/domain/types/ids';
 import {
   MOTIVOS_FECHAMENTO,
+  ORIGENS_DIVERGENCIA,
   type LoteStatus,
   type MotivoFechamento,
+  type OrigemDivergencia,
 } from '@/domain/types/enums';
-import { NotFoundError, ValidationError } from '@/domain/errors/DomainErrors';
+import {
+  DivergenciaDetectadaError,
+  type LinhaDivergencia,
+  NotFoundError,
+  ValidationError,
+} from '@/domain/errors/DomainErrors';
 import { REGRAS_DIVERGENCIA } from '@/domain/rules/divergenciaRules';
 import type { ItemRepository } from '../ports/ItemRepository';
 import type { LocalRepository } from '../ports/LocalRepository';
@@ -41,6 +48,62 @@ export interface RegistrarRetornoLoteInput {
   readonly itens: readonly LinhaLoteInput[];
 }
 
+// Classificação operacional do retorno quando há divergência. Só 5 das 6
+// opções da UI viram fechamento — `retorno_parcial` é UI-only e mapeia
+// para "registra retorno e mantém lote aberto" (comportamento default).
+//
+//   perda          → fecha como 'perda_confirmada'
+//   dano           → fecha como 'danificado'
+//   extravio       → fecha como 'extravio'
+//   erro_operacional → fecha como 'erro_operacional'
+//   outro          → fecha como 'outros' (exige descricao)
+//   retorno_parcial → não fecha (mais peças virão)
+export type ClassificacaoRetorno =
+  | 'perda'
+  | 'dano'
+  | 'extravio'
+  | 'erro_operacional'
+  | 'retorno_parcial'
+  | 'outro';
+
+const CLASSIFICACAO_PARA_MOTIVO: Record<
+  Exclude<ClassificacaoRetorno, 'retorno_parcial'>,
+  MotivoFechamento
+> = {
+  perda: 'perda_confirmada',
+  dano: 'danificado',
+  extravio: 'extravio',
+  erro_operacional: 'erro_operacional',
+  outro: 'outros',
+};
+
+export interface RegistrarRetornoEFinalizarInput extends RegistrarRetornoLoteInput {
+  // Se ausente e o retorno deixar pendência, o service lança
+  // DivergenciaDetectadaError em vez de gravar — UI deve abrir o modal
+  // de classificação e re-submeter com este campo preenchido.
+  readonly classificacao?: ClassificacaoRetorno;
+  // Texto livre do motivo (obrigatório quando classificacao='outro').
+  readonly motivoDescricao?: string | null;
+  // Se diferente do `responsavel`, registra quem autorizou o fechamento.
+  // Útil quando o operador chama o gestor pra autorizar a baixa.
+  readonly responsavelFechamento?: string | null;
+  // Confirmação de risco — propagada pro encerrarComPendencia interno
+  // quando classificação fecha o lote. Mantém invariante de que lotes
+  // de risco exigem ciência explícita.
+  readonly reconhecimentoRisco?: boolean;
+  // Origem provável da divergência. OBRIGATÓRIA quando classificacao é
+  // uma das 5 que fecham o lote (perda/dano/extravio/erro_operacional/outro).
+  // Opcional/null quando classificacao é 'retorno_parcial' (lote permanece
+  // aberto, ainda não há divergência consolidada pra atribuir origem).
+  readonly origemDivergencia?: OrigemDivergencia | null;
+}
+
+export interface ResultadoRetornoFinalizado {
+  readonly status: 'registrado_sem_pendencia' | 'registrado_parcial' | 'concluido_com_divergencia';
+  readonly pendenciaResidual: number;
+  readonly fechado: boolean;
+}
+
 export interface EncerrarLoteInput {
   readonly loteId: LoteId;
   readonly motivo: MotivoFechamento;
@@ -51,6 +114,11 @@ export interface EncerrarLoteInput {
   // Quando há risco detectado e essa flag é false/ausente, o service
   // rejeita — protege contra baixas descuidadas.
   readonly reconhecimentoRisco?: boolean;
+  // Origem provável da divergência. Obrigatória quando o encerramento
+  // resulta de uma classificação operacional (ver registrarRetornoEFinalizar);
+  // opcional no caminho admin (encerramento direto via /admin) — fica null
+  // se não informada.
+  readonly origemDivergencia?: OrigemDivergencia | null;
 }
 
 // Análise de risco pré-encerramento. Consumido pela UI (modal) para
@@ -184,6 +252,7 @@ export class LoteLavanderiaService {
       encerradoPor: null,
       motivoFechamento: null,
       motivoDescricao: null,
+      origemDivergencia: null,
     };
     await this.lotes.criar(lote);
 
@@ -236,6 +305,166 @@ export class LoteLavanderiaService {
         observacao: linha.observacao ?? input.observacao ?? null,
       });
     }
+  }
+
+  // Fluxo unificado do operador no /operacao/acao/receber-lavanderia.
+  //
+  // Resolve a "trava" do fluxo antigo, em que o operador registrava menos
+  // peças que o pendente e o lote ficava preso em `retorno_parcial` para
+  // sempre — sem caminho operacional para concluir. Agora:
+  //
+  //   1. PRÉ-VALIDA: projeta a pendência residual a partir do estado atual
+  //      e do retorno proposto, SEM gravar nada ainda.
+  //   2. Se haverá pendência E `classificacao` foi omitida → lança
+  //      `DivergenciaDetectadaError` com a lista detalhada item-a-item
+  //      (a UI abre modal e re-submete com classificacao preenchida).
+  //   3. Se haverá pendência E `classificacao` indica retorno_parcial →
+  //      grava só o retorno (lote permanece aberto, mais virá).
+  //   4. Se haverá pendência E `classificacao` é uma das 5 que fecham →
+  //      grava retorno + fecha o lote via `encerrarComPendencia` (que
+  //      registra um ajuste por item zerando o saldo de lavanderia).
+  //   5. Se NÃO houver pendência → grava só o retorno (status 'concluido'
+  //      derivado; encerradoEm fica null porque não há pendência a baixar).
+  //
+  // Atomicidade: o pre-check (passo 1) garante que NUNCA gravamos retorno
+  // sem direito a fechar quando o operador esqueceu de classificar. Quando
+  // grava + fecha, o fechamento usa `encerrarComPendencia` que é auto-
+  // convergente (re-tentativa cobre o que sobrou em caso de falha parcial).
+  async registrarRetornoEFinalizar(
+    input: RegistrarRetornoEFinalizarInput,
+  ): Promise<ResultadoRetornoFinalizado> {
+    // Validações estruturais idênticas ao registrarRetorno (preserva
+    // mensagens amigáveis para o operador).
+    if (!input.itens || input.itens.length === 0) {
+      throw new ValidationError('Retorno precisa de pelo menos 1 item');
+    }
+    if (!input.responsavel?.trim()) {
+      throw new ValidationError('Responsável é obrigatório');
+    }
+    const lote = await this.lotes.porId(input.loteId);
+    if (!lote) throw new NotFoundError('Lote', input.loteId);
+    if (lote.encerradoEm) {
+      throw new ValidationError('Lote encerrado não aceita mais retornos');
+    }
+
+    // Projeta pendência APÓS o retorno proposto, sem gravar. Soma o que
+    // já voltou (movs históricas) + o que está sendo proposto agora.
+    const detalheAtual = await this.detalhe(input.loteId);
+    if (!detalheAtual) throw new NotFoundError('Lote', input.loteId);
+
+    const propostaPorItem = new Map<ItemId, number>();
+    for (const linha of input.itens) {
+      if (!Number.isInteger(linha.quantidade) || linha.quantidade < 0) continue;
+      propostaPorItem.set(
+        linha.itemId,
+        (propostaPorItem.get(linha.itemId) ?? 0) + linha.quantidade,
+      );
+    }
+
+    // Linhas com pendência residual (após propor). Excedente — operador
+    // tentando devolver mais que o pendente — é proibido por integridade
+    // (não tem como ser pendência negativa).
+    const divergenciasResiduais: LinhaDivergencia[] = [];
+    for (const item of detalheAtual.itens) {
+      const proposto = propostaPorItem.get(item.itemId) ?? 0;
+      if (proposto > item.pendenciaEfetiva) {
+        throw new ValidationError(
+          `Quantidade retornada de "${item.nomeItem}" (${proposto}) excede o pendente (${item.pendenciaEfetiva}).`,
+        );
+      }
+      const residual = item.pendenciaEfetiva - proposto;
+      if (residual > 0) {
+        divergenciasResiduais.push({
+          itemId: item.itemId,
+          nomeItem: item.nomeItem,
+          enviado: item.totalEnviado,
+          retornado: item.totalRetornado + proposto,
+          diferenca: residual,
+        });
+      }
+    }
+
+    const haDivergencia = divergenciasResiduais.length > 0;
+
+    // Bloqueia se há divergência mas operador não classificou — UI deve
+    // abrir modal de motivo e re-submeter. Nada foi gravado.
+    if (haDivergencia && !input.classificacao) {
+      throw new DivergenciaDetectadaError(divergenciasResiduais);
+    }
+
+    // Validação de motivo='outro' exige descrição (mesma regra do encerrarComPendencia).
+    if (
+      haDivergencia &&
+      input.classificacao === 'outro' &&
+      !input.motivoDescricao?.trim()
+    ) {
+      throw new ValidationError(
+        'Quando a classificação é "outro", a descrição do motivo é obrigatória.',
+      );
+    }
+
+    // Origem da divergência é OBRIGATÓRIA quando a classificação fecha o
+    // lote (5 das 6 opções). Sem origem, relatórios de "perda por imóvel"
+    // vs "perda por lavanderia" ficam corrompidos por valores nulos. Para
+    // `retorno_parcial`, origem fica null (lote permanece aberto, ainda
+    // não há divergência consolidada).
+    if (
+      haDivergencia &&
+      input.classificacao &&
+      input.classificacao !== 'retorno_parcial'
+    ) {
+      if (!input.origemDivergencia) {
+        throw new ValidationError(
+          'Origem provável da divergência é obrigatória quando há perda/dano/extravio/erro/outro.',
+        );
+      }
+      if (!(ORIGENS_DIVERGENCIA as readonly string[]).includes(input.origemDivergencia)) {
+        throw new ValidationError(
+          `Origem da divergência inválida: "${input.origemDivergencia}". Use lavanderia, imovel, operacao ou desconhecida.`,
+        );
+      }
+    }
+
+    // Caminho 1: grava o retorno (mesmo path do registrarRetorno legado).
+    await this.registrarRetorno(input);
+
+    // Caminho 2: sem divergência ou retorno parcial → não fecha. Done.
+    if (!haDivergencia) {
+      return {
+        status: 'registrado_sem_pendencia',
+        pendenciaResidual: 0,
+        fechado: false,
+      };
+    }
+    if (input.classificacao === 'retorno_parcial') {
+      return {
+        status: 'registrado_parcial',
+        pendenciaResidual: divergenciasResiduais.reduce((s, l) => s + l.diferenca, 0),
+        fechado: false,
+      };
+    }
+
+    // Caminho 3: classificação fecha o lote. Mapeia pra MotivoFechamento
+    // e delega pro fluxo administrativo de encerramento.
+    const classFechamento = input.classificacao as Exclude<
+      ClassificacaoRetorno,
+      'retorno_parcial'
+    >;
+    const motivo = CLASSIFICACAO_PARA_MOTIVO[classFechamento];
+    await this.encerrarComPendencia({
+      loteId: input.loteId,
+      motivo,
+      motivoDescricao: input.motivoDescricao ?? null,
+      responsavel: input.responsavelFechamento?.trim() || input.responsavel.trim(),
+      reconhecimentoRisco: input.reconhecimentoRisco ?? false,
+      origemDivergencia: input.origemDivergencia ?? null,
+    });
+
+    return {
+      status: 'concluido_com_divergencia',
+      pendenciaResidual: divergenciasResiduais.reduce((s, l) => s + l.diferenca, 0),
+      fechado: true,
+    };
   }
 
   // Diagnóstico pré-encerramento. Útil para a UI mostrar avisos no modal
@@ -315,6 +544,16 @@ export class LoteLavanderiaService {
     if (input.motivo === 'outros' && !descricao) {
       throw new ValidationError('Descrição é obrigatória quando o motivo é "outros"');
     }
+    // origemDivergencia é opcional aqui (caminho admin direto pode omitir),
+    // mas se vier, tem que ser um valor válido — schema CHECK rejeitaria.
+    if (
+      input.origemDivergencia != null &&
+      !(ORIGENS_DIVERGENCIA as readonly string[]).includes(input.origemDivergencia)
+    ) {
+      throw new ValidationError(
+        `Origem da divergência inválida: "${input.origemDivergencia}".`,
+      );
+    }
 
     const lote = await this.lotes.porId(input.loteId);
     if (!lote) throw new NotFoundError('Lote', input.loteId);
@@ -372,6 +611,7 @@ export class LoteLavanderiaService {
       encerradoPor: input.responsavel,
       motivoFechamento: input.motivo,
       motivoDescricao: descFinal,
+      origemDivergencia: input.origemDivergencia ?? null,
     };
     await this.lotes.atualizar(loteAtualizado);
   }

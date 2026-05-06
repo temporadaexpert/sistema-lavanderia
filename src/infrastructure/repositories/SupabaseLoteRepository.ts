@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Lote } from '@/domain/entities/Lote';
 import type { LocalId, LoteId } from '@/domain/types/ids';
-import type { MotivoFechamento } from '@/domain/types/enums';
+import type {
+  MotivoFechamento,
+  OrigemDivergencia,
+} from '@/domain/types/enums';
 import type { LoteFiltro, LoteRepository } from '@/application/ports/LoteRepository';
 
 // Linha snake_case da tabela `lotes_lavanderia`. Confinada ao repositório —
@@ -19,6 +22,10 @@ interface LoteRow {
   readonly encerrado_por: string | null;
   readonly motivo_fechamento: string | null;
   readonly motivo_descricao: string | null;
+  // CHECK no schema aceita 'lavanderia' | 'imovel' | 'operacao' |
+  // 'desconhecida' | null. Lotes pré-existentes têm null (campo
+  // adicionado por migração).
+  readonly origem_divergencia: string | null;
 }
 
 const TABELA = 'lotes_lavanderia';
@@ -39,6 +46,12 @@ function rowToLote(row: LoteRow): Lote {
     // ou null. Cast seguro porque o banco rejeita valores fora da lista.
     motivoFechamento: row.motivo_fechamento as MotivoFechamento | null,
     motivoDescricao: row.motivo_descricao,
+    // Schema CHECK garante valor dentro do enum ou null — cast seguro.
+    // PostgREST devolve undefined em colunas adicionadas por migração que
+    // foram lidas via cliente cacheado antes do schema reload; coerce
+    // pra null defensivamente.
+    origemDivergencia:
+      (row.origem_divergencia ?? null) as OrigemDivergencia | null,
   };
 }
 
@@ -56,6 +69,7 @@ function loteToRow(l: Lote): LoteRow {
     encerrado_por: l.encerradoPor,
     motivo_fechamento: l.motivoFechamento,
     motivo_descricao: l.motivoDescricao,
+    origem_divergencia: l.origemDivergencia,
   };
 }
 

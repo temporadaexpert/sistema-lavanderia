@@ -4,10 +4,22 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { getContainer } from '@/infrastructure/singleton';
 import { ItemId, LocalId, LoteId } from '@/domain/types/ids';
-import { MOTIVOS_FECHAMENTO, type MotivoFechamento } from '@/domain/types/enums';
-import { DomainError } from '@/domain/errors/DomainErrors';
+import {
+  MOTIVOS_FECHAMENTO,
+  ORIGENS_DIVERGENCIA,
+  type MotivoFechamento,
+  type OrigemDivergencia,
+} from '@/domain/types/enums';
+import {
+  DomainError,
+  DivergenciaDetectadaError,
+  type LinhaDivergencia,
+} from '@/domain/errors/DomainErrors';
 import { ACAO_CONFIG, parseAcao } from './acoes';
-import type { LinhaLoteInput } from '@/application/services/LoteLavanderiaService';
+import type {
+  ClassificacaoRetorno,
+  LinhaLoteInput,
+} from '@/application/services/LoteLavanderiaService';
 
 // Após qualquer operação que mude o estado do domínio, invalidamos os
 // caches de server components que mostram agregados. Assim o admin vê
@@ -23,8 +35,47 @@ function invalidarPaineis(): void {
 }
 
 export type AcaoResultado =
-  | { ok: true; mensagem?: string; loteId?: string }
+  | { ok: true; mensagem?: string; loteId?: string; fechado?: boolean }
+  // Caso especial: o retorno deixaria pendência mas o operador não
+  // classificou. NÃO é falha fatal — é etapa operacional. UI deve abrir
+  // o modal de classificação e re-submeter com `classificacao` preenchida.
+  | {
+      ok: false;
+      code: 'DIVERGENCIA_DETECTADA';
+      error: string;
+      divergencias: readonly LinhaDivergencia[];
+    }
   | { ok: false; code: string; error: string };
+
+const CLASSIFICACOES_VALIDAS = [
+  'perda',
+  'dano',
+  'extravio',
+  'erro_operacional',
+  'retorno_parcial',
+  'outro',
+] as const satisfies readonly ClassificacaoRetorno[];
+
+function parseClassificacao(raw: unknown): ClassificacaoRetorno | undefined {
+  if (typeof raw !== 'string') return undefined;
+  return (CLASSIFICACOES_VALIDAS as readonly string[]).includes(raw)
+    ? (raw as ClassificacaoRetorno)
+    : undefined;
+}
+
+// Resultado tri-estado: ausente (undefined), null explícito (string vazia)
+// ou valor enum válido. Valor inválido vira sentinela `INVALIDO` pra que
+// a action devolva VALIDATION_ERROR antes de chamar o service.
+type OrigemParse = OrigemDivergencia | null | undefined | 'INVALIDO';
+
+function parseOrigemDivergencia(raw: unknown): OrigemParse {
+  if (raw == null) return undefined;
+  if (typeof raw !== 'string') return undefined;
+  if (raw === '') return null;
+  return (ORIGENS_DIVERGENCIA as readonly string[]).includes(raw)
+    ? (raw as OrigemDivergencia)
+    : 'INVALIDO';
+}
 
 // Server actions da camada operacional. Todas são adapters finos: parseiam
 // FormData, montam o DTO do caso de uso e traduzem DomainError em mensagem.
@@ -180,6 +231,14 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
     const loteIdRaw = formData.get('loteId');
     const responsavelRaw = formData.get('responsavel');
     const observacaoRaw = formData.get('observacao');
+    // Campos opcionais: presentes só na 2ª submissão (após modal de
+    // classificação). Na 1ª submissão chegam undefined → service detecta
+    // divergência e devolve DivergenciaDetectadaError pra UI abrir modal.
+    const classificacaoRaw = formData.get('classificacao');
+    const motivoDescricaoRaw = formData.get('motivoDescricao');
+    const responsavelFechamentoRaw = formData.get('responsavelFechamento');
+    const reconhecimentoRiscoRaw = formData.get('reconhecimentoRisco');
+    const origemDivergenciaRaw = formData.get('origemDivergencia');
 
     if (typeof loteIdRaw !== 'string' || !loteIdRaw) {
       return { ok: false, code: 'VALIDATION_ERROR', error: 'Selecione o lote a receber' };
@@ -196,17 +255,59 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
     }
 
     const container = await getContainer();
-    await container.loteLavanderia.registrarRetorno({
+    const classificacao = parseClassificacao(classificacaoRaw);
+    const origemParse = parseOrigemDivergencia(origemDivergenciaRaw);
+    if (origemParse === 'INVALIDO') {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        error:
+          'Origem da divergência inválida. Use lavanderia, imovel, operacao ou desconhecida.',
+      };
+    }
+    const origemDivergencia: OrigemDivergencia | null | undefined =
+      origemParse === undefined ? undefined : origemParse;
+    const resultado = await container.loteLavanderia.registrarRetornoEFinalizar({
       loteId: LoteId(loteIdRaw),
       responsavel: typeof responsavelRaw === 'string' ? responsavelRaw : '',
       observacao:
         typeof observacaoRaw === 'string' && observacaoRaw.trim() ? observacaoRaw.trim() : null,
       itens: linhas,
+      classificacao,
+      motivoDescricao:
+        typeof motivoDescricaoRaw === 'string' && motivoDescricaoRaw.trim()
+          ? motivoDescricaoRaw.trim()
+          : null,
+      responsavelFechamento:
+        typeof responsavelFechamentoRaw === 'string' && responsavelFechamentoRaw.trim()
+          ? responsavelFechamentoRaw.trim()
+          : null,
+      reconhecimentoRisco:
+        reconhecimentoRiscoRaw === 'on' ||
+        reconhecimentoRiscoRaw === 'true' ||
+        reconhecimentoRiscoRaw === '1',
+      origemDivergencia,
     });
 
     invalidarPaineis();
-    return { ok: true, mensagem: 'Retorno registrado e pendências atualizadas.' };
+    const mensagem =
+      resultado.status === 'concluido_com_divergencia'
+        ? 'Retorno registrado e lote concluído com divergência.'
+        : resultado.status === 'registrado_parcial'
+          ? 'Retorno parcial registrado — lote permanece aberto aguardando o restante.'
+          : 'Retorno registrado e pendências atualizadas.';
+    return { ok: true, mensagem, fechado: resultado.fechado };
   } catch (err) {
+    // Caso especial: divergência detectada sem classificação. Não é
+    // falha — UI deve oferecer modal de motivo e re-submeter.
+    if (err instanceof DivergenciaDetectadaError) {
+      return {
+        ok: false,
+        code: 'DIVERGENCIA_DETECTADA',
+        error: err.message,
+        divergencias: err.divergencias,
+      };
+    }
     return toResultado(err, '[registrarRetornoLoteAction]');
   }
 }

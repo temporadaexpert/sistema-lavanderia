@@ -1,5 +1,5 @@
 import type { LocalId, LoteId } from '../types/ids';
-import type { MotivoFechamento } from '../types/enums';
+import type { MotivoFechamento, OrigemDivergencia } from '../types/enums';
 
 // Lote (remessa) de lavanderia. É o "cabeçalho" do envio: identidade,
 // quem enviou, para onde, quando e observação geral. As QUANTIDADES
@@ -32,4 +32,10 @@ export interface Lote {
   readonly encerradoPor: string | null;
   readonly motivoFechamento: MotivoFechamento | null;
   readonly motivoDescricao: string | null;
+  // Origem provável da pendência — coletada do operador no modal de
+  // classificação ao concluir retorno com divergência. Permite relatórios
+  // agrupados (lavanderia vs imóvel vs operação interna). Sempre null em
+  // lotes sem encerramento; quando o lote é fechado, vira não-null
+  // exceto se a classificação foi `retorno_parcial` (que não fecha).
+  readonly origemDivergencia: OrigemDivergencia | null;
 }

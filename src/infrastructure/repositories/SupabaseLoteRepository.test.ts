@@ -51,6 +51,7 @@ function novoLote(
     encerradoPor: null,
     motivoFechamento: null,
     motivoDescricao: null,
+    origemDivergencia: null,
     ...overrides,
   };
 }
