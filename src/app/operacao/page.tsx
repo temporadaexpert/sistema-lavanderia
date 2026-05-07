@@ -15,6 +15,7 @@ import {
   listarItensTodos,
   listarLocaisTodos,
 } from '@/app/_lib/data';
+import { listarLotesAbertos } from '@/app/_lib/loteData';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -90,6 +91,7 @@ export default async function OperacaoHome() {
     locaisTodos,
     historico,
     diasAbertosAnteriores,
+    lotesPendentes,
   ] = await Promise.all([
     resumoControleDiario(),
     divergenciaDoDia(data),
@@ -99,6 +101,11 @@ export default async function OperacaoHome() {
     listarLocaisTodos(),
     historicoRecente(8),
     listarDiasAbertosAnteriores(data),
+    // Lotes abertos = enviados pra lavanderia mas ainda não totalmente
+    // recebidos/encerrados. Filtro do service garante: encerradoEm IS NULL
+    // E status in (aberto | retorno_parcial | com_divergencia). Status
+    // 'concluido' (enviado=retornado, sem precisar fechar) NÃO entra.
+    listarLotesAbertos(),
   ]);
   // Bloqueio de início de novo dia: se há dia anterior aberto, o
   // operador precisa fechá-lo antes de tocar em qualquer coisa daily.
@@ -108,6 +115,8 @@ export default async function OperacaoHome() {
   const diaPendenteFormatado = diaPendente
     ? formatarDataBR(diaPendente.data)
     : null;
+  // Contagem só pra UX — service já filtrou por status correto.
+  const totalLotesPendentes = lotesPendentes.length;
   const estado = classificar(resumo, divergencia, controleHoje);
   const meta = ESTADO_META[estado];
 
@@ -323,6 +332,18 @@ export default async function OperacaoHome() {
                 icone="↙"
                 titulo="Receber da lavanderia"
                 sub="Limpo voltando pra estoque"
+                badge={
+                  totalLotesPendentes > 0
+                    ? {
+                        texto:
+                          totalLotesPendentes === 1
+                            ? '1 pendente'
+                            : `${totalLotesPendentes} pendentes`,
+                        // Pra leitor de tela / hover.
+                        ariaLabel: `${totalLotesPendentes} lote(s) aguardando retorno`,
+                      }
+                    : undefined
+                }
               />
             </div>
           </section>
@@ -407,11 +428,15 @@ function AcaoLink({
   icone,
   titulo,
   sub,
+  badge,
 }: {
   href: string;
   icone: string;
   titulo: string;
   sub: string;
+  // Badge opcional renderizado no canto superior direito do card.
+  // Quando ausente, o card aparece sem decoração extra.
+  badge?: { texto: string; ariaLabel: string };
 }) {
   return (
     <Link href={href} className={`${styles.acao} ${styles.acaoLavanderia}`}>
@@ -420,6 +445,15 @@ function AcaoLink({
         <span className={styles.acaoTitulo}>{titulo}</span>
         <span className={styles.acaoSub}>{sub}</span>
       </span>
+      {badge && (
+        <span
+          className={styles.acaoBadge}
+          role="status"
+          aria-label={badge.ariaLabel}
+        >
+          {badge.texto}
+        </span>
+      )}
     </Link>
   );
 }

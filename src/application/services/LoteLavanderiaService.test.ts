@@ -288,6 +288,122 @@ describe('LoteLavanderiaService', () => {
       const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
       expect(abertos.map((r) => r.lote.id)).toEqual([aberto.id]);
     });
+
+    // Contagem usada pelo badge "X pendentes" no card "Receber da
+    // lavanderia" (/operacao). Cobre os 4 cenários da spec do usuário.
+    describe('contagem de lotes pendentes (badge no menu)', () => {
+      it('sem lotes → contagem zero (badge não aparece)', async () => {
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(0);
+      });
+
+      it('1 lote enviado sem retorno → contagem = 1', async () => {
+        await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        });
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(1);
+      });
+
+      it('múltiplos lotes pendentes (3) → contagem reflete', async () => {
+        for (let i = 0; i < 3; i++) {
+          await c.loteLavanderia.criarEnvio({
+            origemId: TEST_LOCAIS.deposito,
+            destinoId: TEST_LOCAIS.lavanderia,
+            responsavel: `Op ${i}`,
+            itens: [{ itemId: TEST_ITENS.toalha, quantidade: 2 }],
+          });
+        }
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(3);
+      });
+
+      it('retorno parcial AINDA conta (lote sem fechar)', async () => {
+        const lote = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 10 }],
+        });
+        await c.loteLavanderia.registrarRetorno({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 6 }],
+        });
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(1);
+        expect(abertos[0]?.status).toBe('retorno_parcial');
+      });
+
+      it('lote concluído (enviado=retornado, sem fechar) NÃO conta', async () => {
+        const lote = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 4 }],
+        });
+        await c.loteLavanderia.registrarRetorno({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 4 }],
+        });
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(0);
+      });
+
+      it('mix: 2 abertos + 1 concluído + 1 encerrado → contagem = 2', async () => {
+        // Aberto 1
+        await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'A',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 2 }],
+        });
+        // Aberto 2 (parcial)
+        const parcial = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'B',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 8 }],
+        });
+        await c.loteLavanderia.registrarRetorno({
+          loteId: parcial.id,
+          responsavel: 'B',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        });
+        // Concluído
+        const conc = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'C',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+        });
+        await c.loteLavanderia.registrarRetorno({
+          loteId: conc.id,
+          responsavel: 'C',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+        });
+        // Encerrado com pendência
+        const enc = await c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'D',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 4 }],
+        });
+        await c.loteLavanderia.encerrarComPendencia({
+          loteId: enc.id,
+          motivo: 'perda_confirmada',
+          responsavel: 'Gestor',
+          reconhecimentoRisco: true,
+        });
+
+        const abertos = await c.loteLavanderia.listar({ apenasAbertos: true });
+        expect(abertos).toHaveLength(2);
+      });
+    });
   });
 
   describe('encerrarComPendencia', () => {

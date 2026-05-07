@@ -604,3 +604,37 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ---- Badge de pendência no card de ação (Receber da lavanderia) ----
+ * Aparece no canto superior direito quando há lotes aguardando retorno.
+ * Pequeno, vermelho, sem quebrar o layout do card. Mobile-safe — fica
+ * sobre o card mas não atrapalha o toque (área do <Link> intacta).
+ */
+.acao {
+  position: relative;
+}
+
+.acaoBadge {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  background: var(--danger, #dc2626);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.35);
+  pointer-events: none;
+}
+
+@media (max-width: 380px) {
+  .acaoBadge {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+}
