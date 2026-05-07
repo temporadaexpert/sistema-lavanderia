@@ -240,6 +240,21 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
     const reconhecimentoRiscoRaw = formData.get('reconhecimentoRisco');
     const origemDivergenciaRaw = formData.get('origemDivergencia');
 
+    // Diagnóstico temporário em produção: aparece no painel Vercel
+    // (Logs → Functions). Remove depois que confirmar que a action
+    // certa está sendo invocada. Não loga responsável/observação pra
+    // não vazar nome em log persistente.
+    console.info('[registrarRetornoLoteAction] entrou', {
+      loteIdPresente: typeof loteIdRaw === 'string' && loteIdRaw.length > 0,
+      classificacaoRaw,
+      origemDivergenciaRaw,
+      temMotivoDescricao:
+        typeof motivoDescricaoRaw === 'string' && motivoDescricaoRaw.length > 0,
+      temResponsavelFechamento:
+        typeof responsavelFechamentoRaw === 'string' &&
+        responsavelFechamentoRaw.length > 0,
+    });
+
     if (typeof loteIdRaw !== 'string' || !loteIdRaw) {
       return { ok: false, code: 'VALIDATION_ERROR', error: 'Selecione o lote a receber' };
     }
@@ -289,6 +304,11 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
       origemDivergencia,
     });
 
+    console.info('[registrarRetornoLoteAction] chamou registrarRetornoEFinalizar', {
+      status: resultado.status,
+      fechado: resultado.fechado,
+      pendenciaResidual: resultado.pendenciaResidual,
+    });
     invalidarPaineis();
     const mensagem =
       resultado.status === 'concluido_com_divergencia'
@@ -301,6 +321,10 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
     // Caso especial: divergência detectada sem classificação. Não é
     // falha — UI deve oferecer modal de motivo e re-submeter.
     if (err instanceof DivergenciaDetectadaError) {
+      console.info('[registrarRetornoLoteAction] retornou DIVERGENCIA_DETECTADA', {
+        qtdLinhas: err.divergencias.length,
+        totalFaltante: err.divergencias.reduce((s, l) => s + l.diferenca, 0),
+      });
       return {
         ok: false,
         code: 'DIVERGENCIA_DETECTADA',
@@ -308,6 +332,10 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
         divergencias: err.divergencias,
       };
     }
+    console.info('[registrarRetornoLoteAction] erro', {
+      tipo: err instanceof Error ? err.constructor.name : typeof err,
+      msg: err instanceof Error ? err.message : String(err),
+    });
     return toResultado(err, '[registrarRetornoLoteAction]');
   }
 }

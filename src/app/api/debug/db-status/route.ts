@@ -113,6 +113,21 @@ export async function GET(req: NextRequest) {
       ),
       SEED_DEMO: process.env.SEED_DEMO ?? '(unset)',
     },
+    // Build/deploy fingerprint — Vercel popula essas envs automaticamente.
+    // Permite confirmar QUAL commit está rodando em produção, sem ambiguidade.
+    deploy: {
+      VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? '(unset)',
+      VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF ?? '(unset)',
+      VERCEL_GIT_COMMIT_MESSAGE:
+        process.env.VERCEL_GIT_COMMIT_MESSAGE?.slice(0, 80) ?? '(unset)',
+      VERCEL_ENV: process.env.VERCEL_ENV ?? '(unset)',
+      VERCEL_REGION: process.env.VERCEL_REGION ?? '(unset)',
+    },
+    // Flag que prova se o build TEM o fluxo novo de divergência.
+    // Sem ele, a aplicação está numa versão que não conhece o modal.
+    feature_flags: {
+      tem_fluxo_divergencia_unificado: true, // hard-coded no commit 721e165+
+    },
     counts: {
       categorias: categorias.length,
       itens: itens.length,

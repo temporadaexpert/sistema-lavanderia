@@ -386,6 +386,15 @@ export class LoteLavanderiaService {
 
     const haDivergencia = divergenciasResiduais.length > 0;
 
+    // Diagnóstico temporário pra confirmar caminho em produção. Aparece
+    // nos logs de Function da Vercel.
+    console.info('[registrarRetornoEFinalizar] pré-check', {
+      haDivergencia,
+      qtdLinhasDivergentes: divergenciasResiduais.length,
+      classificacao: input.classificacao,
+      origemDivergencia: input.origemDivergencia,
+    });
+
     // Bloqueia se há divergência mas operador não classificou — UI deve
     // abrir modal de motivo e re-submeter. Nada foi gravado.
     if (haDivergencia && !input.classificacao) {

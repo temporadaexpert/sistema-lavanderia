@@ -14,7 +14,10 @@
       "Bash(npm install *)",
       "Bash(awk *)",
       "Bash(SUPABASE_TEST_OK=1 npx vitest run src/infrastructure/repositories/SupabaseCategoryRepository.test.ts)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(git ls-remote *)",
+      "Bash(git check-ignore *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }
