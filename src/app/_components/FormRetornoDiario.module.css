@@ -527,3 +527,60 @@
   cursor: not-allowed;
   box-shadow: none;
 }
+
+/* ===========================================================================
+   Grid de classificação (radio cards) — usado no modal de fechamento com
+   divergência. Mesma UX do modal do FormReceberLavanderia.
+   =========================================================================== */
+
+.classificacaoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 540px) {
+  .classificacaoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.classificacaoItem {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+  background: #fff;
+}
+
+.classificacaoItem:hover {
+  border-color: var(--accent);
+  background: #f8fafc;
+}
+
+.classificacaoItemAtivo {
+  background: #eaf1fd;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.classificacaoRadio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.classificacaoRotulo {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+}
+
+.classificacaoDescricao {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}

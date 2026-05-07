@@ -150,7 +150,7 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
       // (`'divergencias' in r` narrows o discriminated union — só a variante
       // DIVERGENCIA_DETECTADA tem o campo, e o `code: string` da variante
       // genérica não permite narrow só por igualdade de string literal.)
-      if (!r.ok && 'divergencias' in r) {
+      if (!r.ok && r.code === 'DIVERGENCIA_DETECTADA' && 'divergencias' in r) {
         setDivergencias(r.divergencias);
         setClassificacao('');
         setOrigemDivergencia('');

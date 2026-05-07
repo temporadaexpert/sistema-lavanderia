@@ -45,6 +45,8 @@ function novoControle(
     responsavelRetorno: null,
     responsavelFechamento: null,
     motivoDivergencia: null,
+    classificacaoDivergencia: null,
+    origemDivergencia: null,
     ...overrides,
   };
 }

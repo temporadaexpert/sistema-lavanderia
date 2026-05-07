@@ -5,7 +5,18 @@ import type {
   LinhaRetornada,
 } from '@/domain/entities/ControleDiarioEnxoval';
 import { ControleDiarioId, type ItemId } from '@/domain/types/ids';
-import { NotFoundError, ValidationError } from '@/domain/errors/DomainErrors';
+import {
+  CLASSIFICACOES_DIVERGENCIA_DIARIA,
+  ORIGENS_DIVERGENCIA,
+  type ClassificacaoDivergenciaDiaria,
+  type OrigemDivergencia,
+} from '@/domain/types/enums';
+import {
+  DivergenciaDiariaDetectadaError,
+  type LinhaDivergenciaDiariaDetectada,
+  NotFoundError,
+  ValidationError,
+} from '@/domain/errors/DomainErrors';
 import type { ControleDiarioRepository } from '../ports/ControleDiarioRepository';
 import type { ItemRepository } from '../ports/ItemRepository';
 import type { Clock, IdGenerator } from './MovimentacaoService';
@@ -99,9 +110,16 @@ export interface RegistrarRetornoInput {
   // usa `responsavel`. Tipicamente diferente em cenário com divergência:
   // a funcionária conta o retorno, mas o gestor autoriza fechamento com perda.
   readonly responsavelFechamento?: string;
-  // Obrigatório quando fecharDia=true E há divergência. Explicação do
-  // que aconteceu (ex.: "1 toalha rasgou", "esqueceram no imóvel 302").
+  // Obrigatório quando fecharDia=true E há divergência E classificação='outro'.
+  // Em demais classificações, é descrição opcional (texto livre auxiliar).
   readonly motivoDivergencia?: string;
+  // Classificação estruturada da divergência (perda/dano/extravio/erro_op/outro).
+  // Obrigatória quando fecharDia=true E há divergência. Sem ela, o service
+  // lança `DivergenciaDiariaDetectadaError` e a UI deve abrir modal.
+  readonly classificacaoDivergencia?: ClassificacaoDivergenciaDiaria;
+  // Origem provável (lavanderia/imovel/operacao/desconhecida). Mesma regra
+  // de obrigatoriedade da classificação.
+  readonly origemDivergencia?: OrigemDivergencia;
 }
 
 // Aceita YYYY-MM-DD ou ISO datetime e normaliza para YYYY-MM-DD.
@@ -217,6 +235,8 @@ export class ControleDiarioService {
           responsavelRetorno: null,
           responsavelFechamento: null,
           motivoDivergencia: null,
+          classificacaoDivergencia: null,
+          origemDivergencia: null,
         };
     await this.repo.salvar(controle);
     return controle;
@@ -259,6 +279,8 @@ export class ControleDiarioService {
       responsavelRetorno: null,
       responsavelFechamento: null,
       motivoDivergencia: null,
+      classificacaoDivergencia: null,
+      origemDivergencia: null,
     };
 
     const fechar = input.fecharDia === true;
@@ -267,32 +289,71 @@ export class ControleDiarioService {
     }
 
     // Quando fecha o dia, avalia se há divergência a partir do snapshot
-    // (envio base do dia + retorno atual). Se há, exige motivo + responsável
-    // do fechamento — o gestor precisa reconhecer explicitamente a perda.
+    // (envio base do dia + retorno atual). Se há, exige classificação +
+    // origem + responsável — gestor reconhece explicitamente a perda.
     let novoStatus = base.status;
     let novoResponsavelFechamento = base.responsavelFechamento;
     let novoMotivoDivergencia = base.motivoDivergencia;
+    let novaClassificacao = base.classificacaoDivergencia;
+    let novaOrigem = base.origemDivergencia;
 
     if (fechar) {
       const snapshotFechamento: ControleDiarioEnxoval = { ...base, retorno };
       const divergencia = this.projetarDivergencia(snapshotFechamento);
       if (divergencia.temDivergencia) {
-        const motivo = input.motivoDivergencia?.trim();
-        if (!motivo) {
-          throw new ValidationError(
-            'Existem peças faltantes ou em excesso. Informe o motivo do fechamento.',
+        const classificacao = input.classificacaoDivergencia;
+        const origem = input.origemDivergencia;
+
+        // Se classificação OU origem ausente: lança erro TIPADO com payload.
+        // A action traduz para code='DIVERGENCIA_DIARIA_DETECTADA' e a UI
+        // abre o modal REATIVAMENTE — funciona mesmo quando o snapshot
+        // server-rendered não conhece a divergência form-live.
+        if (!classificacao || !origem) {
+          throw new DivergenciaDiariaDetectadaError(
+            this.linhasDivergenciaDiariaParaUi(divergencia),
           );
         }
+
+        // Validação dos enums (defesa em profundidade — action também valida).
+        if (
+          !(CLASSIFICACOES_DIVERGENCIA_DIARIA as readonly string[]).includes(
+            classificacao,
+          )
+        ) {
+          throw new ValidationError(
+            `Classificação de divergência inválida: "${classificacao}".`,
+          );
+        }
+        if (!(ORIGENS_DIVERGENCIA as readonly string[]).includes(origem)) {
+          throw new ValidationError(
+            `Origem da divergência inválida: "${origem}".`,
+          );
+        }
+
+        // motivoDivergencia (texto livre) é OBRIGATÓRIO só quando
+        // classificacao='outro' (operador precisa explicar). Nas demais,
+        // é opcional descrição auxiliar.
+        const motivo = input.motivoDivergencia?.trim() ?? '';
+        if (classificacao === 'outro' && !motivo) {
+          throw new ValidationError(
+            'Quando a classificação é "outro", a descrição do motivo é obrigatória.',
+          );
+        }
+
         const responsavelFechamento =
           input.responsavelFechamento?.trim() || input.responsavel.trim();
         novoStatus = 'fechado_com_divergencia';
         novoResponsavelFechamento = responsavelFechamento;
-        novoMotivoDivergencia = motivo;
+        novoMotivoDivergencia = motivo || null;
+        novaClassificacao = classificacao;
+        novaOrigem = origem;
       } else {
         novoStatus = 'fechado';
         novoResponsavelFechamento =
           input.responsavelFechamento?.trim() || input.responsavel.trim();
         novoMotivoDivergencia = null;
+        novaClassificacao = null;
+        novaOrigem = null;
       }
     }
 
@@ -304,9 +365,44 @@ export class ControleDiarioService {
       fechadoEm: fechar ? agora : base.fechadoEm,
       responsavelFechamento: novoResponsavelFechamento,
       motivoDivergencia: novoMotivoDivergencia,
+      classificacaoDivergencia: novaClassificacao,
+      origemDivergencia: novaOrigem,
     };
     await this.repo.salvar(atualizado);
     return atualizado;
+  }
+
+  // Converte a projeção interna (DivergenciaDiaria) para o payload exposto
+  // pelo erro tipado. Mantém os 2 modelos separados — projeção tem mais
+  // detalhes de classe/sujo/limpo; erro só carrega o suficiente pra UI.
+  private linhasDivergenciaDiariaParaUi(
+    div: DivergenciaDiaria,
+  ): LinhaDivergenciaDiariaDetectada[] {
+    const itensCache = this.itensCachePromise();
+    return div.linhas
+      .filter((l) => l.classe !== 'ok')
+      .map((l) => {
+        const faltante = Math.max(0, l.divergencia);
+        const excedente = Math.max(0, -l.divergencia);
+        return {
+          itemId: String(l.itemId),
+          // nomeItem é resolvido na action/UI (cache de itens disponível
+          // lá); aqui usamos placeholder seguro pra não bloquear o erro.
+          nomeItem: String(l.itemId),
+          enviado: l.enviado,
+          retornado: l.totalRetornado,
+          faltante,
+          excedente,
+        };
+      })
+      .filter((l) => l.faltante > 0 || l.excedente > 0);
+  }
+
+  // Hook não-bloqueante de cache de itens — futura otimização. Hoje a
+  // função acima resolve com itemId puro; UI substitui pelo nome via
+  // listarItensTodos. Mantém método aqui pra contrato estável.
+  private itensCachePromise(): Promise<unknown> | null {
+    return null;
   }
 
   async obterPorData(data: string): Promise<ControleDiarioEnxoval | null> {

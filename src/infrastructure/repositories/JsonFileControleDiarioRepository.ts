@@ -64,5 +64,13 @@ function normalizar(r: ControleDiarioEnxoval): ControleDiarioEnxoval {
       (r as { responsavelFechamento?: string | null }).responsavelFechamento ?? null,
     motivoDivergencia:
       (r as { motivoDivergencia?: string | null }).motivoDivergencia ?? null,
+    // Adicionados pela migration 0003. JSON pré-existente não tem os
+    // campos — coerce pra null pra preservar a forma do tipo.
+    classificacaoDivergencia:
+      (r as { classificacaoDivergencia?: ControleDiarioEnxoval['classificacaoDivergencia'] })
+        .classificacaoDivergencia ?? null,
+    origemDivergencia:
+      (r as { origemDivergencia?: ControleDiarioEnxoval['origemDivergencia'] })
+        .origemDivergencia ?? null,
   };
 }

@@ -14,6 +14,7 @@ import {
   DomainError,
   DivergenciaDetectadaError,
   type LinhaDivergencia,
+  type LinhaDivergenciaDiariaDetectada,
 } from '@/domain/errors/DomainErrors';
 import { ACAO_CONFIG, parseAcao } from './acoes';
 import type {
@@ -44,6 +45,18 @@ export type AcaoResultado =
       code: 'DIVERGENCIA_DETECTADA';
       error: string;
       divergencias: readonly LinhaDivergencia[];
+    }
+  // Caso especial do FECHAMENTO DIÁRIO: operador clicou "Salvar e fechar
+  // o dia" mas há divergência sem classificação informada. Mesma estratégia
+  // do lote — UI abre modal reativamente. Payload tem faltante + excedente
+  // (snapshot diário pode ter ambos simultaneamente).
+  | {
+      ok: false;
+      code: 'DIVERGENCIA_DIARIA_DETECTADA';
+      error: string;
+      divergencias: readonly LinhaDivergenciaDiariaDetectada[];
+      totalFaltante: number;
+      totalExcedente: number;
     }
   | { ok: false; code: string; error: string };
 

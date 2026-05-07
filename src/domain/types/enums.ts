@@ -60,3 +60,20 @@ export const ORIGENS_DIVERGENCIA = [
   'desconhecida',
 ] as const;
 export type OrigemDivergencia = (typeof ORIGENS_DIVERGENCIA)[number];
+
+// Classificação da divergência no FECHAMENTO DIÁRIO (controle do dia).
+// Diferente de `MotivoFechamento` (lote) — daily expressa a CATEGORIA crua
+// do operador, sem o vocabulário formal de baixa administrativa.
+//
+// Não inclui `retorno_parcial` (que existe em lote como "mais virá depois")
+// porque no daily isso é mapeado para o botão "Salvar parcial" (não fecha
+// o dia).
+export const CLASSIFICACOES_DIVERGENCIA_DIARIA = [
+  'perda',
+  'dano',
+  'extravio',
+  'erro_operacional',
+  'outro',
+] as const;
+export type ClassificacaoDivergenciaDiaria =
+  (typeof CLASSIFICACOES_DIVERGENCIA_DIARIA)[number];

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ContadorItem } from './ContadorItem';
 import { salvarRetornoDiarioAction } from '../_lib/controleDiarioActions';
 import type { AcaoResultado } from '../_lib/actions';
+import type { LinhaDivergenciaDiariaDetectada } from '@/domain/errors/DomainErrors';
 import styles from './FormRetornoDiario.module.css';
 
 interface ItemOpcao {
@@ -23,6 +24,30 @@ interface LinhaResumoDivergencia {
   readonly nomeItem: string;
   readonly faltante: number;
 }
+
+// 5 classificações no fechamento DIÁRIO. Diferente do lote (que tem 6 com
+// retorno_parcial), aqui não tem "parcial" porque o operador usa o botão
+// "Salvar parcial" pra esse fluxo.
+const CLASSIFICACOES = [
+  { valor: 'perda', rotulo: 'Perda', desc: 'Peças confirmadamente perdidas.' },
+  { valor: 'dano', rotulo: 'Dano', desc: 'Peças voltaram danificadas.' },
+  { valor: 'extravio', rotulo: 'Extravio', desc: 'Peças sumiram (em rota, etc).' },
+  {
+    valor: 'erro_operacional',
+    rotulo: 'Erro operacional',
+    desc: 'Contagem ou registro errado.',
+  },
+  { valor: 'outro', rotulo: 'Outro', desc: 'Descreva no campo abaixo.' },
+] as const;
+type ClassValor = (typeof CLASSIFICACOES)[number]['valor'];
+
+const ORIGENS = [
+  { valor: 'lavanderia', rotulo: 'Lavanderia' },
+  { valor: 'imovel', rotulo: 'Imóvel' },
+  { valor: 'operacao', rotulo: 'Operação interna' },
+  { valor: 'desconhecida', rotulo: 'Desconhecida' },
+] as const;
+type OrigemValor = (typeof ORIGENS)[number]['valor'];
 
 interface Props {
   readonly dataHoje: string;
@@ -61,11 +86,23 @@ export function FormRetornoDiario({
   // Estado do modal de fechamento com divergência
   const [motivoModal, setMotivoModal] = useState('');
   const [responsavelFechamentoModal, setResponsavelFechamentoModal] = useState('');
+  const [classificacao, setClassificacao] = useState<ClassValor | ''>('');
+  const [origemDivergencia, setOrigemDivergencia] = useState<OrigemValor | ''>('');
   const [erroModal, setErroModal] = useState<string | null>(null);
+  // Snapshot do que o SERVIDOR retornou ao detectar divergência live.
+  // Sobrescreve `linhasFaltanteHoje` (snapshot pré-renderizado) na tela
+  // do modal — cobre o cenário "operador alterou números mas não salvou".
+  const [linhasServidor, setLinhasServidor] = useState<readonly LinhaDivergenciaDiariaDetectada[]>([]);
+  const [totaisServidor, setTotaisServidor] = useState<{ falt: number; exc: number } | null>(null);
 
   async function enviar(
     fechar: boolean,
-    extras?: { motivoDivergencia?: string; responsavelFechamento?: string },
+    extras?: {
+      motivoDivergencia?: string;
+      responsavelFechamento?: string;
+      classificacao?: ClassValor;
+      origemDivergencia?: OrigemValor;
+    },
   ) {
     const form = formRef.current;
     if (!form) return;
@@ -78,11 +115,34 @@ export function FormRetornoDiario({
     if (extras?.responsavelFechamento) {
       formData.set('responsavelFechamento', extras.responsavelFechamento);
     }
+    if (extras?.classificacao) {
+      formData.set('classificacaoDivergencia', extras.classificacao);
+    }
+    if (extras?.origemDivergencia) {
+      formData.set('origemDivergencia', extras.origemDivergencia);
+    }
 
     setLoading(true);
     setResultado(null);
     try {
       const r = await salvarRetornoDiarioAction(formData);
+
+      // GATILHO REATIVO: server detectou divergência sem classificação.
+      // Resolve o bug do print do usuário: o snapshot pré-renderizado
+      // (`temDivergenciaHoje`) podia estar desatualizado em relação aos
+      // números digitados no form. Agora abrimos modal independente disso.
+      if (!r.ok && 'divergencias' in r && r.code === 'DIVERGENCIA_DIARIA_DETECTADA') {
+        setLinhasServidor(r.divergencias);
+        setTotaisServidor({ falt: r.totalFaltante, exc: r.totalExcedente });
+        setClassificacao('');
+        setOrigemDivergencia('');
+        setMotivoModal('');
+        setResponsavelFechamentoModal(responsavel);
+        setErroModal(null);
+        dialogRef.current?.showModal();
+        return r;
+      }
+
       setResultado(r);
       if (r.ok) {
         dialogRef.current?.close();
@@ -98,25 +158,41 @@ export function FormRetornoDiario({
 
   function aoClicarFechar() {
     if (temDivergenciaHoje) {
-      // Abre modal obrigatório com motivo + responsável
+      // Pré-emptivo: abre modal direto baseado no SNAPSHOT (já sabemos
+      // que tem divergência). Evita um round-trip. Se snapshot estiver
+      // desatualizado e não houver divergência live, o submit do modal
+      // ainda pode falhar — mas isso é raro.
+      setLinhasServidor([]); // usa linhasFaltanteHoje (snapshot)
+      setTotaisServidor(null);
+      setClassificacao('');
+      setOrigemDivergencia('');
       setMotivoModal('');
       setResponsavelFechamentoModal(responsavel);
       setErroModal(null);
       dialogRef.current?.showModal();
     } else {
-      // Sem divergência: fecha direto
+      // Submete; o gatilho reativo dentro de `enviar` abre o modal se
+      // o servidor detectar divergência (form-live).
       void enviar(true);
     }
   }
 
   async function confirmarFechamentoComDivergencia(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const motivo = motivoModal.trim();
-    const resp = responsavelFechamentoModal.trim();
-    if (!motivo) {
-      setErroModal('Descreva o que aconteceu com as peças faltantes.');
+    if (!classificacao) {
+      setErroModal('Selecione uma classificação para concluir.');
       return;
     }
+    if (!origemDivergencia) {
+      setErroModal('Selecione a origem provável da divergência.');
+      return;
+    }
+    const motivo = motivoModal.trim();
+    if (classificacao === 'outro' && !motivo) {
+      setErroModal('Quando a classificação é "outro", descreva o motivo.');
+      return;
+    }
+    const resp = responsavelFechamentoModal.trim();
     if (!resp) {
       setErroModal('Informe quem está autorizando o fechamento com divergência.');
       return;
@@ -124,8 +200,12 @@ export function FormRetornoDiario({
     const r = await enviar(true, {
       motivoDivergencia: motivo,
       responsavelFechamento: resp,
+      classificacao,
+      origemDivergencia,
     });
-    if (r && !r.ok) setErroModal(r.error);
+    if (r && !r.ok && r.code !== 'DIVERGENCIA_DIARIA_DETECTADA') {
+      setErroModal(r.error);
+    }
   }
 
   function fecharModal() {
@@ -272,35 +352,105 @@ export function FormRetornoDiario({
 
           <div className={styles.modalAviso}>
             <p>
-              Estão faltando <strong>{totalFaltanteHoje} peça(s)</strong>
-              {totalExcedenteHoje > 0 && (
+              {(totaisServidor?.falt ?? totalFaltanteHoje) > 0 && (
                 <>
-                  {' '}e sobrando <strong>{totalExcedenteHoje} peça(s)</strong>
+                  Faltando{' '}
+                  <strong>
+                    {totaisServidor?.falt ?? totalFaltanteHoje} peça(s)
+                  </strong>
                 </>
               )}
-              . Para fechar o dia assim, é obrigatório registrar o motivo.
+              {(totaisServidor?.exc ?? totalExcedenteHoje) > 0 && (
+                <>
+                  {(totaisServidor?.falt ?? totalFaltanteHoje) > 0 ? ' e ' : ''}
+                  sobrando{' '}
+                  <strong>
+                    {totaisServidor?.exc ?? totalExcedenteHoje} peça(s)
+                  </strong>
+                </>
+              )}
+              . Para fechar o dia assim, classifique e descreva.
             </p>
-            {linhasFaltanteHoje.length > 0 && (
+            {(linhasServidor.length > 0 ? linhasServidor : linhasFaltanteHoje).length > 0 && (
               <ul className={styles.modalLista}>
-                {linhasFaltanteHoje.map((l) => (
-                  <li key={l.itemId}>
-                    {l.nomeItem}: <strong>−{l.faltante}</strong>
-                  </li>
-                ))}
+                {/* Prioriza linhas vindas do server (form-live state); cai
+                    pra snapshot pré-renderizado quando server não bateu ainda. */}
+                {linhasServidor.length > 0
+                  ? linhasServidor.map((l) => (
+                      <li key={l.itemId}>
+                        {l.nomeItem}:{' '}
+                        {l.faltante > 0 && <strong>−{l.faltante}</strong>}
+                        {l.faltante > 0 && l.excedente > 0 && ' / '}
+                        {l.excedente > 0 && <strong>+{l.excedente}</strong>}
+                      </li>
+                    ))
+                  : linhasFaltanteHoje.map((l) => (
+                      <li key={l.itemId}>
+                        {l.nomeItem}: <strong>−{l.faltante}</strong>
+                      </li>
+                    ))}
               </ul>
             )}
           </div>
 
+          <fieldset className={styles.modalCampo}>
+            <legend className={styles.modalLabel}>Classificação (obrigatório)</legend>
+            <div className={styles.classificacaoGrid}>
+              {CLASSIFICACOES.map((c) => (
+                <label
+                  key={c.valor}
+                  className={`${styles.classificacaoItem} ${
+                    classificacao === c.valor ? styles.classificacaoItemAtivo : ''
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="classificacaoModal"
+                    value={c.valor}
+                    checked={classificacao === c.valor}
+                    onChange={() => setClassificacao(c.valor)}
+                    className={styles.classificacaoRadio}
+                  />
+                  <span className={styles.classificacaoRotulo}>{c.rotulo}</span>
+                  <span className={styles.classificacaoDescricao}>{c.desc}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
           <label className={styles.modalCampo}>
-            <span className={styles.modalLabel}>Motivo (obrigatório)</span>
+            <span className={styles.modalLabel}>
+              Origem provável da divergência (obrigatório)
+            </span>
+            <select
+              className={styles.modalInput}
+              value={origemDivergencia}
+              onChange={(e) => setOrigemDivergencia(e.target.value as OrigemValor | '')}
+              disabled={loading}
+            >
+              <option value="">Selecione onde a peça provavelmente sumiu…</option>
+              {ORIGENS.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.rotulo}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className={styles.modalCampo}>
+            <span className={styles.modalLabel}>
+              Descrição
+              {classificacao === 'outro'
+                ? ' (obrigatório para "Outro")'
+                : ' (opcional)'}
+            </span>
             <textarea
               className={styles.modalTextarea}
               rows={3}
               maxLength={500}
-              placeholder="Ex.: 2 toalhas rasgaram na lavagem; 1 fronha esquecida no imóvel 302."
+              placeholder='Ex.: "2 toalhas rasgaram na lavagem; 1 fronha esquecida no imóvel 302."'
               value={motivoModal}
               onChange={(e) => setMotivoModal(e.target.value)}
-              autoFocus
             />
           </label>
 
@@ -334,7 +484,13 @@ export function FormRetornoDiario({
             <button
               type="submit"
               className={styles.modalBotaoPrimario}
-              disabled={loading || !motivoModal.trim() || !responsavelFechamentoModal.trim()}
+              disabled={
+                loading ||
+                !classificacao ||
+                !origemDivergencia ||
+                !responsavelFechamentoModal.trim() ||
+                (classificacao === 'outro' && !motivoModal.trim())
+              }
             >
               {loading ? 'Fechando…' : 'Confirmar fechamento com divergência'}
             </button>

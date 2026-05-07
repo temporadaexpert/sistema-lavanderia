@@ -132,6 +132,8 @@ describe('ControleDiarioService: bloqueio de dia anterior aberto', () => {
       responsavelRetorno: null,
       responsavelFechamento: null,
       motivoDivergencia: null,
+      classificacaoDivergencia: null,
+      origemDivergencia: null,
     });
 
     const abertos = await c.controleDiario.listarDiasAbertosAnteriores('2026-04-11');
@@ -199,6 +201,8 @@ describe('ControleDiarioService: bloqueio de dia anterior aberto', () => {
       responsavelRetorno: null,
       responsavelFechamento: null,
       motivoDivergencia: null,
+      classificacaoDivergencia: null,
+      origemDivergencia: null,
     });
 
     try {

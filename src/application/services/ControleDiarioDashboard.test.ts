@@ -93,6 +93,8 @@ describe('Integração: controle diário da funcionária ↔ admin', () => {
       responsavel: 'Bruno',
       itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 7, recebidoLimpo: 0 }],
       fecharDia: true,
+      classificacaoDivergencia: 'extravio',
+      origemDivergencia: 'imovel',
       motivoDivergencia: '3 toalhas esquecidas no imóvel 302',
       responsavelFechamento: 'Gestor',
     });

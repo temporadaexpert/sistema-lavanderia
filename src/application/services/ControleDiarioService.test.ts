@@ -271,6 +271,8 @@ describe('ControleDiarioService', () => {
       responsavelRetorno: null,
       responsavelFechamento: null,
       motivoDivergencia: null,
+      classificacaoDivergencia: null,
+      origemDivergencia: null,
     };
     await c.controlesDiarios.salvar({ ...base, id: 'id-a' as never, data: '2026-04-10' });
     await c.controlesDiarios.salvar({ ...base, id: 'id-b' as never, data: '2026-04-08' });
@@ -375,10 +377,10 @@ describe('ControleDiarioService', () => {
           itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 7, recebidoLimpo: 0 }],
           fecharDia: true,
         }),
-      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+      ).rejects.toMatchObject({ code: 'DIVERGENCIA_DIARIA_DETECTADA' });
     });
 
-    it('fecha com divergência + motivo → status fechado_com_divergencia', async () => {
+    it('fecha com divergência + classificação + origem → status fechado_com_divergencia', async () => {
       await c.controleDiario.registrarEnvio({
         data: '2026-04-10',
         responsavel: 'X',
@@ -389,11 +391,15 @@ describe('ControleDiarioService', () => {
         responsavel: 'Funcionária',
         itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 7, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'extravio',
+        origemDivergencia: 'imovel',
         motivoDivergencia: '3 toalhas esquecidas no imóvel 302',
         responsavelFechamento: 'Gestor',
       });
       expect(r.status).toBe('fechado_com_divergencia');
       expect(r.motivoDivergencia).toBe('3 toalhas esquecidas no imóvel 302');
+      expect(r.classificacaoDivergencia).toBe('extravio');
+      expect(r.origemDivergencia).toBe('imovel');
       expect(r.responsavelFechamento).toBe('Gestor');
       expect(r.fechadoEm).not.toBeNull();
     });
@@ -409,6 +415,8 @@ describe('ControleDiarioService', () => {
         responsavel: 'Ana',
         itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 3, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'perda',
+        origemDivergencia: 'lavanderia',
         motivoDivergencia: 'perda confirmada',
       });
       expect(r.responsavelFechamento).toBe('Ana');
@@ -425,6 +433,8 @@ describe('ControleDiarioService', () => {
         responsavel: 'Y',
         itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 7, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'perda',
+        origemDivergencia: 'lavanderia',
         motivoDivergencia: 'perda',
       });
       await expect(
@@ -489,6 +499,8 @@ describe('ControleDiarioService', () => {
         responsavel: 'Y',
         itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 7, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'perda',
+        origemDivergencia: 'lavanderia',
         motivoDivergencia: 'perda',
       });
       const list = await c.controleDiario.listarDivergencias();
@@ -512,6 +524,8 @@ describe('ControleDiarioService', () => {
         responsavel: 'Y',
         itens: [{ itemId: TEST_ITENS.semPreco, recebidoSujo: 3, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'perda',
+        origemDivergencia: 'lavanderia',
         motivoDivergencia: 'perda',
       });
       const list = await c.controleDiario.listarDivergencias();
@@ -543,6 +557,8 @@ describe('ControleDiarioService', () => {
         responsavel: 'Y',
         itens: [{ itemId: TEST_ITENS.toalha, recebidoSujo: 3, recebidoLimpo: 0 }],
         fecharDia: true,
+        classificacaoDivergencia: 'perda',
+        origemDivergencia: 'lavanderia',
         motivoDivergencia: 'perda',
       });
 

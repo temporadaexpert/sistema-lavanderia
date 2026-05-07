@@ -6,6 +6,10 @@ import type {
   LinhaRetornada,
 } from '@/domain/entities/ControleDiarioEnxoval';
 import type { ControleDiarioId } from '@/domain/types/ids';
+import type {
+  ClassificacaoDivergenciaDiaria,
+  OrigemDivergencia,
+} from '@/domain/types/enums';
 import type { ControleDiarioRepository } from '@/application/ports/ControleDiarioRepository';
 
 // Linha snake_case da tabela `controles_diarios`. Os campos `enviado` e
@@ -33,6 +37,10 @@ interface ControleDiarioRow {
   readonly responsavel_retorno: string | null;
   readonly responsavel_fechamento: string | null;
   readonly motivo_divergencia: string | null;
+  // Adicionados pela migration 0003. Em rows pré-existentes vêm null
+  // (PostgREST normaliza colunas ausentes).
+  readonly classificacao_divergencia: string | null;
+  readonly origem_divergencia: string | null;
 }
 
 const TABELA = 'controles_diarios';
@@ -53,6 +61,13 @@ function rowToControle(row: ControleDiarioRow): ControleDiarioEnxoval {
     responsavelRetorno: row.responsavel_retorno,
     responsavelFechamento: row.responsavel_fechamento,
     motivoDivergencia: row.motivo_divergencia,
+    // CHECK do schema garante valor dentro do enum ou null — cast seguro.
+    // `?? null` defensivo cobre rows lidos via cliente cacheado antes do
+    // schema reload pós-migration 0003.
+    classificacaoDivergencia:
+      (row.classificacao_divergencia ?? null) as ClassificacaoDivergenciaDiaria | null,
+    origemDivergencia:
+      (row.origem_divergencia ?? null) as OrigemDivergencia | null,
   };
 }
 
@@ -71,6 +86,8 @@ function controleToRow(c: ControleDiarioEnxoval): ControleDiarioRow {
     responsavel_retorno: c.responsavelRetorno,
     responsavel_fechamento: c.responsavelFechamento,
     motivo_divergencia: c.motivoDivergencia,
+    classificacao_divergencia: c.classificacaoDivergencia,
+    origem_divergencia: c.origemDivergencia,
   };
 }
 

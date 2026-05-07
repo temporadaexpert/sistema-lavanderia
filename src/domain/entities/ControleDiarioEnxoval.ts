@@ -1,4 +1,8 @@
 import type { ControleDiarioId, ItemId } from '../types/ids';
+import type {
+  ClassificacaoDivergenciaDiaria,
+  OrigemDivergencia,
+} from '../types/enums';
 
 // Registro diário operacional do enxoval baseado no depósito. Complementa
 // o controle por lote da lavanderia: aqui, o foco é o fluxo macro do dia
@@ -45,5 +49,14 @@ export interface ControleDiarioEnxoval {
   // Preenchidos só quando o dia é fechado COM divergência. Ficam null em
   // dias que fecharam ok ou que ainda não fecharam.
   readonly responsavelFechamento: string | null;
+  // Texto livre — descrição detalhada do que aconteceu (obrigatória só
+  // quando classificacaoDivergencia='outro'; opcional nas demais).
   readonly motivoDivergencia: string | null;
+  // Categoria estruturada da divergência. Obrigatória ao fechar com
+  // divergência (a partir do fluxo unificado do operador). Permite
+  // relatórios agrupados por tipo no admin.
+  readonly classificacaoDivergencia: ClassificacaoDivergenciaDiaria | null;
+  // Origem provável da divergência (mesmo enum usado em lote). Obrigatória
+  // ao fechar com divergência. Permite relatórios "perda por canal".
+  readonly origemDivergencia: OrigemDivergencia | null;
 }
