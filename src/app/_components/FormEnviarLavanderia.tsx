@@ -7,6 +7,27 @@ import type { Local } from '@/domain/entities/Local';
 import { criarLoteEnvioAction, type AcaoResultado } from '../_lib/actions';
 import styles from './OperacaoForm.module.css';
 
+// Calcula "hoje" no timezone São Paulo no formato YYYY-MM-DD. Usado pra
+// preencher o default do input type="date" e como `max` (impede futuro).
+// Reimplementado inline em vez de importar de _lib porque este arquivo
+// é client component e _lib depende do container/server.
+function hojeYmdSP(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date());
+}
+
+// Limite mínimo retroativo — bate com DIAS_RETROATIVO_MAX no service
+// (90 dias). UI usa como `min` no input pra dar feedback nativo do browser
+// antes do round-trip; service revalida.
+function dataMinimaRetroativaYmd(): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - 90);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+  }).format(d);
+}
+
 interface Props {
   itens: Item[];
   depositos: Local[];
@@ -29,6 +50,12 @@ export function FormEnviarLavanderia({ itens, depositos, lavanderias }: Props) {
   const [linhas, setLinhas] = useState<Linha[]>(() => [novaLinha()]);
   const [resultado, setResultado] = useState<AcaoResultado | null>(null);
   const [loading, setLoading] = useState(false);
+  // Default = hoje (SP). Operador pode escolher data anterior pra
+  // lançamento retroativo (até 90 dias). Não permite futuro.
+  const [dataEnvio, setDataEnvio] = useState<string>(() => hojeYmdSP());
+  const hojeYmd = hojeYmdSP();
+  const minYmd = dataMinimaRetroativaYmd();
+  const ehRetroativo = dataEnvio !== '' && dataEnvio < hojeYmd;
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -119,6 +146,35 @@ export function FormEnviarLavanderia({ itens, depositos, lavanderias }: Props) {
           </select>
         </div>
       )}
+
+      {/* Data operacional do envio (separada de criadoEm). Default = hoje
+          em SP; permite retroativo até 90d via `min`; bloqueia futuro via
+          `max`. Aviso "Lançamento retroativo" aparece quando data < hoje. */}
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="dataEnvio">
+          Data do envio
+          {ehRetroativo && (
+            <span className={styles.badgeRetroativo} title="Esta data é anterior a hoje">
+              Lançamento retroativo
+            </span>
+          )}
+        </label>
+        <input
+          id="dataEnvio"
+          name="dataEnvio"
+          type="date"
+          className={styles.input}
+          value={dataEnvio}
+          min={minYmd}
+          max={hojeYmd}
+          onChange={(e) => setDataEnvio(e.target.value)}
+          required
+        />
+        <span className={styles.hint}>
+          Padrão: hoje. Pode lançar retroativo (até 90 dias). Auditoria registra
+          também o instante do registro no sistema.
+        </span>
+      </div>
 
       <div className={styles.linhasWrapper}>
         <div className={styles.linhasHeader}>

@@ -18,6 +18,10 @@ describe('Integração: envio da funcionária reflete no dashboard do admin', ()
 
   beforeEach(async () => {
     c = criarContainerDeTeste();
+    // Os testes deste arquivo usam datas operacionais em abril/2026.
+    // Avança o relógio do FakeClock pra DEPOIS dessas datas — assim a
+    // validação de "não-futuro" do criarEnvio aceita.
+    c.clock.set('2026-04-25T12:00:00.000Z');
     await semearBasico(c);
     // Estoque inicial pra permitir envio
     await c.movimentacaoService.registrar({

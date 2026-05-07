@@ -541,3 +541,18 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* Badge usado em FormEnviarLavanderia ao lado do label "Data do envio"
+   quando o operador escolhe data anterior a hoje. Não bloqueia, só sinaliza. */
+.badgeRetroativo {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+  vertical-align: middle;
+}

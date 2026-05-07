@@ -880,4 +880,150 @@ describe('LoteLavanderiaService', () => {
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
+
+  describe('data operacional do envio (criarEnvio)', () => {
+    // Helper: ymd em SP a partir de uma Date.
+    function ymdSP(d: Date): string {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo',
+      }).format(d);
+    }
+
+    function isoMeioDia(ymd: string): string {
+      return `${ymd}T12:00:00.000Z`;
+    }
+
+    function deslocarDias(d: Date, dias: number): Date {
+      const c = new Date(d);
+      c.setUTCDate(c.getUTCDate() + dias);
+      return c;
+    }
+
+    it('aceita dataEnvio = hoje (BRT) e persiste no header do lote', async () => {
+      const agora = new Date(c.clock.agoraISO());
+      const hojeYmd = ymdSP(agora);
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        dataEnvio: isoMeioDia(hojeYmd),
+      });
+      // O lote.dataEnvio é exatamente o que foi passado (não substituído pelo clock).
+      expect(lote.dataEnvio).toBe(isoMeioDia(hojeYmd));
+      // criadoEm fica separado, ancorado no relógio do sistema.
+      expect(lote.criadoEm).toBe(c.clock.agoraISO());
+    });
+
+    it('aceita dataEnvio retroativo (30 dias atrás)', async () => {
+      const agora = new Date(c.clock.agoraISO());
+      const ymdRetro = ymdSP(deslocarDias(agora, -30));
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        dataEnvio: isoMeioDia(ymdRetro),
+      });
+      expect(lote.dataEnvio).toBe(isoMeioDia(ymdRetro));
+      // Auditoria preservada: criadoEm reflete o instante real do registro,
+      // diferente da dataEnvio operacional.
+      expect(lote.criadoEm).not.toBe(lote.dataEnvio);
+    });
+
+    it('aceita dataEnvio no limite retroativo (90 dias atrás)', async () => {
+      const agora = new Date(c.clock.agoraISO());
+      const ymdLimite = ymdSP(deslocarDias(agora, -90));
+      await expect(
+        c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+          dataEnvio: isoMeioDia(ymdLimite),
+        }),
+      ).resolves.toBeDefined();
+    });
+
+    it('rejeita dataEnvio futura (amanhã)', async () => {
+      const agora = new Date(c.clock.agoraISO());
+      const ymdFuturo = ymdSP(deslocarDias(agora, 1));
+      await expect(
+        c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+          dataEnvio: isoMeioDia(ymdFuturo),
+        }),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
+        message: expect.stringMatching(/não pode ser futura/i),
+      });
+    });
+
+    it('rejeita dataEnvio retroativa além do limite (>90 dias)', async () => {
+      const agora = new Date(c.clock.agoraISO());
+      const ymdMuitoAntigo = ymdSP(deslocarDias(agora, -91));
+      await expect(
+        c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+          dataEnvio: isoMeioDia(ymdMuitoAntigo),
+        }),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_ERROR',
+        message: expect.stringMatching(/muito antiga|limite/i),
+      });
+    });
+
+    it('rejeita dataEnvio com formato inválido (string que não parsea)', async () => {
+      await expect(
+        c.loteLavanderia.criarEnvio({
+          origemId: TEST_LOCAIS.deposito,
+          destinoId: TEST_LOCAIS.lavanderia,
+          responsavel: 'Ana',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+          dataEnvio: 'isso-nao-eh-uma-data',
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    });
+
+    it('default (sem dataEnvio): usa clock e NÃO valida (preserva comportamento legado)', async () => {
+      // Quando o caller omite, o service usa `agoraISO()`. Isso é sempre
+      // válido por construção (presente, não futuro). O guard de validação
+      // só dispara quando dataEnvio é passado explicitamente.
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      expect(lote.dataEnvio).toBe(c.clock.agoraISO());
+      expect(lote.criadoEm).toBe(c.clock.agoraISO());
+    });
+
+    it('movimentações vinculadas ao lote refletem a dataEnvio operacional (não o clock)', async () => {
+      // Crítico pra auditoria: as movs `envio_lavanderia` carregam a data
+      // operacional escolhida pelo operador, não o instante do registro.
+      // Relatórios temporais (saldo histórico, divergências por mês)
+      // dependem disso pra agrupar corretamente.
+      const agora = new Date(c.clock.agoraISO());
+      const ymdRetro = ymdSP(deslocarDias(agora, -7));
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+        dataEnvio: isoMeioDia(ymdRetro),
+      });
+      const movs = await c.movimentacoes.listar({ loteId: lote.id });
+      expect(movs).toHaveLength(1);
+      expect(movs[0]?.dataHora).toBe(isoMeioDia(ymdRetro));
+      // E `registradoEm` (campo de auditoria da movimentação) reflete o clock.
+      expect(movs[0]?.registradoEm).toBe(c.clock.agoraISO());
+    });
+  });
 });

@@ -161,6 +161,9 @@ describe('Admin dashboard: visibilidade do Controle Diário', () => {
   });
 
   it('daily control + envio real pra lavanderia coexistem sem somar', async () => {
+    // Avança o clock pra "hoje" cobrir a dataEnvio operacional do lote
+    // (2026-04-15) — validação de não-futuro no criarEnvio exige.
+    c.clock.set('2026-04-15T20:00:00.000Z');
     // Funcionária conta 100 no daily
     await c.controleDiario.registrarEnvio({
       data: '2026-04-15',

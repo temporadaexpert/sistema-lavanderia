@@ -184,8 +184,33 @@ export async function criarLoteEnvioAction(formData: FormData): Promise<AcaoResu
     const destinoRaw = formData.get('destinoId');
     const responsavelRaw = formData.get('responsavel');
     const observacaoRaw = formData.get('observacao');
+    const dataEnvioRaw = formData.get('dataEnvio');
 
-    if (typeof origemRaw !== 'string' || !origemRaw) {
+    // Parse da data operacional. Formato esperado: YYYY-MM-DD (input
+    // type=date). Convertemos pra ISO datetime no MEIO-DIA UTC pra evitar
+    // drift de fuso horário — o timestamptz no banco fica ancorado num
+    // ponto-no-tempo unambiguamente "dentro do dia escolhido" em qualquer
+    // timezone razoável (UTC-12 a UTC+12). Validação de range (futuro/
+    // retroativo extremo) acontece no service.
+    let dataEnvioIso: string | undefined;
+    let erroDataEnvio: string | null = null;
+    if (typeof dataEnvioRaw === 'string' && dataEnvioRaw.length > 0) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dataEnvioRaw)) {
+        erroDataEnvio = 'Data de envio inválida (formato esperado: AAAA-MM-DD)';
+      } else if (Number.isNaN(Date.parse(dataEnvioRaw))) {
+        erroDataEnvio = 'Data de envio inválida';
+      } else {
+        dataEnvioIso = `${dataEnvioRaw}T12:00:00.000Z`;
+      }
+    }
+
+    if (erroDataEnvio) {
+      erroResultado = {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        error: erroDataEnvio,
+      };
+    } else if (typeof origemRaw !== 'string' || !origemRaw) {
       erroResultado = {
         ok: false,
         code: 'VALIDATION_ERROR',
@@ -218,6 +243,9 @@ export async function criarLoteEnvioAction(formData: FormData): Promise<AcaoResu
               ? observacaoRaw.trim()
               : null,
           itens: linhas,
+          // Quando ausente, o service preenche com `clock.agoraISO()` —
+          // semantically same as "registrei na hora exata do envio".
+          dataEnvio: dataEnvioIso,
         });
         loteIdCriado = lote.id;
         invalidarPaineis();

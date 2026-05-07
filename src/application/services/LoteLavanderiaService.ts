@@ -198,6 +198,12 @@ export class LoteLavanderiaService {
     if (!input.responsavel?.trim()) {
       throw new ValidationError('Responsável é obrigatório');
     }
+    // Validação da data operacional (separada de `criadoEm`). Permite
+    // retroativo (até DIAS_RETROATIVO_MAX dias) mas NÃO futuro — auditoria
+    // só fica íntegra se nenhum lote for datado depois do "agora real".
+    if (input.dataEnvio) {
+      this.validarDataEnvioOperacional(input.dataEnvio);
+    }
     for (const linha of input.itens) {
       if (!Number.isInteger(linha.quantidade) || linha.quantidade <= 0) {
         throw new ValidationError('Quantidade de cada linha deve ser inteiro positivo');
@@ -271,6 +277,57 @@ export class LoteLavanderiaService {
     }
 
     return lote;
+  }
+
+  // Limite máximo de retroatividade — escolhido em 90 dias por:
+  //   - cobre lançamentos esquecidos do trimestre anterior (caso real)
+  //   - bloqueia digitação acidental (operador colocando ano 1925)
+  //   - mantém auditoria com janela razoável de "registros ainda em revisão"
+  private readonly DIAS_RETROATIVO_MAX = 90;
+
+  // Valida a data operacional do envio. Regras:
+  //   - Formato ISO datetime válido (parseável por Date)
+  //   - Não pode ser FUTURA (em horário São Paulo) — não se "envia"
+  //     amanhã hoje; envio futuro deve ser registrado quando ocorrer.
+  //   - Pode ser passada até DIAS_RETROATIVO_MAX (lançamento retroativo
+  //     legítimo). Operador classifica retroatividade, sistema permite.
+  //
+  // Timezone São Paulo é usado pra resolver "hoje" — o operador trabalha
+  // no horário local e o conceito de "data do envio" é local. Internamente
+  // a data é armazenada como ISO datetime (timestamptz no banco) ancorada
+  // ao meio-dia UTC pelo caller, evitando drift de fuso.
+  private validarDataEnvioOperacional(iso: string): void {
+    const data = new Date(iso);
+    if (Number.isNaN(data.getTime())) {
+      throw new ValidationError(
+        `Data de envio inválida: "${iso}".`,
+      );
+    }
+
+    const TZ = 'America/Sao_Paulo';
+    const fmtYmd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ });
+
+    const agora = new Date(this.clock.agoraISO());
+    const hojeYmd = fmtYmd.format(agora);
+    const dataYmd = fmtYmd.format(data);
+
+    if (dataYmd > hojeYmd) {
+      throw new ValidationError(
+        `Data de envio não pode ser futura. Informado: ${dataYmd}, hoje: ${hojeYmd}.`,
+      );
+    }
+
+    // Limite retroativo: subtrai dias do "agora" e converte para YMD em
+    // SP. Comparação por string YYYY-MM-DD é segura (lexicográfica = temporal).
+    const limite = new Date(agora);
+    limite.setUTCDate(limite.getUTCDate() - this.DIAS_RETROATIVO_MAX);
+    const limiteYmd = fmtYmd.format(limite);
+
+    if (dataYmd < limiteYmd) {
+      throw new ValidationError(
+        `Data de envio muito antiga (limite: ${this.DIAS_RETROATIVO_MAX} dias). Informado: ${dataYmd}, mínimo: ${limiteYmd}.`,
+      );
+    }
   }
 
   async registrarRetorno(input: RegistrarRetornoLoteInput): Promise<void> {
