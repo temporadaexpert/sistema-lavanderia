@@ -123,10 +123,16 @@ export async function GET(req: NextRequest) {
       VERCEL_ENV: process.env.VERCEL_ENV ?? '(unset)',
       VERCEL_REGION: process.env.VERCEL_REGION ?? '(unset)',
     },
-    // Flag que prova se o build TEM o fluxo novo de divergência.
-    // Sem ele, a aplicação está numa versão que não conhece o modal.
+    // Flags que provam quais features o BUILD ATUAL contém. Hard-coded
+    // pelo commit. Se a Vercel deployar um commit anterior, esses valores
+    // somem do response — diagnóstico inequívoco de "deploy stale".
     feature_flags: {
-      tem_fluxo_divergencia_unificado: true, // hard-coded no commit 721e165+
+      tem_fluxo_divergencia_lote: true, // commit 721e165+
+      tem_origem_divergencia_lote: true, // commit 721e165+ + migration 0002
+      tem_fluxo_divergencia_diaria: true, // commit d4be422+ + migration 0003
+      tem_classificacao_divergencia_diaria: true, // commit d4be422+
+      // Versão lógica do fluxo. Bumpa quando muda comportamento observável.
+      fluxo_retorno_diario_versao: 'v2-modal-classificacao-origem',
     },
     counts: {
       categorias: categorias.length,

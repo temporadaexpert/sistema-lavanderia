@@ -333,16 +333,31 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
   } catch (err) {
     // Caso especial: divergência detectada sem classificação. Não é
     // falha — UI deve oferecer modal de motivo e re-submeter.
-    if (err instanceof DivergenciaDetectadaError) {
+    //
+    // Detecção tolerante a boundary de módulo: `instanceof` pode falhar
+    // em produção quando Next.js carrega o mesmo arquivo via 2 paths de
+    // bundle. Verificamos também por `name` e `code` como fallback.
+    const ehDivLote =
+      err instanceof DivergenciaDetectadaError ||
+      (err !== null &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code: unknown }).code === 'DIVERGENCIA_DETECTADA' &&
+        'divergencias' in err &&
+        Array.isArray((err as { divergencias: unknown }).divergencias)) ||
+      (err instanceof Error && err.name === 'DivergenciaDetectadaError');
+    if (ehDivLote) {
+      const divergencias = (err as { divergencias: readonly LinhaDivergencia[] })
+        .divergencias;
       console.info('[registrarRetornoLoteAction] retornou DIVERGENCIA_DETECTADA', {
-        qtdLinhas: err.divergencias.length,
-        totalFaltante: err.divergencias.reduce((s, l) => s + l.diferenca, 0),
+        qtdLinhas: divergencias.length,
+        totalFaltante: divergencias.reduce((s, l) => s + l.diferenca, 0),
       });
       return {
         ok: false,
         code: 'DIVERGENCIA_DETECTADA',
-        error: err.message,
-        divergencias: err.divergencias,
+        error: (err as Error).message,
+        divergencias,
       };
     }
     console.info('[registrarRetornoLoteAction] erro', {
