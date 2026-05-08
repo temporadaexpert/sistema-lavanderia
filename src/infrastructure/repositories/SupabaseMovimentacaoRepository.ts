@@ -28,6 +28,10 @@ interface MovimentacaoRow {
   readonly cancelado_em: string | null;
   readonly cancelado_por: string | null;
   readonly motivo_cancelamento: string | null;
+  // Coluna nullable apenas porque rows pré-migration 0005 (cache de schema
+  // antigo, leituras durante deploy parcial) podem chegar sem ela. O cast
+  // pra Movimentacao trata como `true` (default do schema).
+  readonly conciliado?: boolean | null;
 }
 
 const TABELA = 'movimentacoes';
@@ -58,6 +62,9 @@ function rowToMovimentacao(row: MovimentacaoRow): Movimentacao {
     canceladoEm: row.cancelado_em,
     canceladoPor: row.cancelado_por,
     motivoCancelamento: row.motivo_cancelamento,
+    // Linhas anteriores à migration 0005 não têm a coluna; o cast pega
+    // como undefined → tratamos como conciliada (default do schema novo).
+    conciliado: (row.conciliado ?? true) as boolean,
   };
 }
 
@@ -79,6 +86,7 @@ function movimentacaoToRow(m: Movimentacao): MovimentacaoRow {
     cancelado_em: m.canceladoEm,
     cancelado_por: m.canceladoPor,
     motivo_cancelamento: m.motivoCancelamento,
+    conciliado: m.conciliado,
   };
 }
 

@@ -11,4 +11,10 @@ export interface RegistrarMovimentacaoInput {
   readonly observacao?: string | null;
   readonly dataHora?: string;
   readonly loteId?: LoteId | null;
+  // Default true. Passar false APENAS no canal "excedente operacional
+  // não conciliado" do recebimento de lavanderia (ver
+  // LoteLavanderiaService.registrarRetornoEFinalizar). Exposto no DTO
+  // pra forçar o caller a ser explícito quando estiver criando uma mov
+  // não-conciliada — não é algo que deva acontecer por descuido.
+  readonly conciliado?: boolean;
 }

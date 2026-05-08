@@ -12,7 +12,9 @@ import {
 import {
   DivergenciaDetectadaError,
   type LinhaDivergencia,
+  type LinhaRetornoAnormal,
   NotFoundError,
+  RetornoAnormalDetectadoError,
   ValidationError,
 } from '@/domain/errors/DomainErrors';
 import { REGRAS_DIVERGENCIA } from '@/domain/rules/divergenciaRules';
@@ -96,12 +98,45 @@ export interface RegistrarRetornoEFinalizarInput extends RegistrarRetornoLoteInp
   // Opcional/null quando classificacao é 'retorno_parcial' (lote permanece
   // aberto, ainda não há divergência consolidada pra atribuir origem).
   readonly origemDivergencia?: OrigemDivergencia | null;
+  // Confirmação explícita de que o operador conferiu o número anormalmente
+  // alto. Sem isso, o service recusa um proposto acima do limite
+  // (ver RetornoAnormalDetectadoError) — bloqueia erro de digitação tipo
+  // "250" em vez de "25". UI re-submete com true após o operador confirmar
+  // no modal âmbar.
+  readonly confirmacaoAnormalidade?: boolean;
+}
+
+// Alocação de uma fatia do retorno em um destino contábil (lote específico
+// ou retorno avulso). Operador devolve N peças → o service descobre como
+// distribuir entre o lote escolhido, lotes anteriores ainda pendentes do
+// MESMO item, e o canal "excedente" (loteId=null) quando sobrar.
+export interface AlocacaoRetorno {
+  readonly loteId: LoteId | null;
+  readonly loteCodigo: string | null; // null quando excedente avulso
+  readonly quantidade: number;
+}
+
+// Distribuição calculada para um item dentro do retorno. Carrega o
+// resumo numérico (quitado/abatido/excedente) que a UI usa no aviso e
+// a lista crua de alocações que viraram movs gravadas.
+export interface DistribuicaoItemRetorno {
+  readonly itemId: ItemId;
+  readonly nomeItem: string;
+  readonly quantidadeRetornada: number;
+  readonly quitadoLoteAtual: number;
+  readonly abatidoEmAnteriores: number;
+  readonly excedente: number;
+  readonly alocacoes: readonly AlocacaoRetorno[];
 }
 
 export interface ResultadoRetornoFinalizado {
   readonly status: 'registrado_sem_pendencia' | 'registrado_parcial' | 'concluido_com_divergencia';
   readonly pendenciaResidual: number;
   readonly fechado: boolean;
+  // Quebra de para-onde-foi cada peça retornada — carrega a história
+  // legível pra UI montar o aviso "X quitaram este envio, Y compensaram
+  // pendência anterior do lote L-..., Z entraram como excedente operacional".
+  readonly distribuicao: readonly DistribuicaoItemRetorno[];
 }
 
 export interface EncerrarLoteInput {
@@ -418,24 +453,125 @@ export class LoteLavanderiaService {
       );
     }
 
-    // Linhas com pendência residual (após propor). Excedente — operador
-    // tentando devolver mais que o pendente — é proibido por integridade
-    // (não tem como ser pendência negativa).
+    // Soma efetiva proposta. Vazio (tudo zero) é tratado como "não há
+    // retorno a registrar" — bloqueia. A camada de action já filtra qtd<=0,
+    // mas defendemos no service também (chamadas diretas em testes/outros).
+    const totalProposto = Array.from(propostaPorItem.values()).reduce(
+      (s, n) => s + n,
+      0,
+    );
+    if (totalProposto <= 0) {
+      throw new ValidationError(
+        'Informe a quantidade retornada de pelo menos 1 item (valor maior que zero).',
+      );
+    }
+
+    // Itens "conhecidos" do lote atual (com envio prévio) — base do cálculo
+    // de quitação. Itens propostos que NÃO existem neste lote ainda têm que
+    // ser distribuídos (ou via lotes anteriores, ou como excedente).
+    const pendenciaPorItemAtual = new Map<ItemId, number>();
+    const nomePorItem = new Map<ItemId, string>();
+    for (const it of detalheAtual.itens) {
+      pendenciaPorItemAtual.set(it.itemId, it.pendenciaEfetiva);
+      nomePorItem.set(it.itemId, it.nomeItem);
+    }
+
+    // Pendência aberta nos lotes ANTERIORES por item — usada (a) pelo
+    // alocador FIFO, (b) pelo detector de anomalia (para somar com a
+    // pendência atual e formar a "pendenciaTotal" usada na regra). Lemos
+    // uma vez antes do loop de itens e reaproveitamos.
+    const pendenciaAnteriorPorItem = await this.somarPendenciaAnterioresPorItem(
+      input.loteId,
+    );
+
+    // Detector de anomalia (regra absoluta+percentual): proposto >
+    // pendenciaTotal + max(10, pendenciaTotal * 0.3). A regra absoluta
+    // (10) cobre escalas pequenas (pendência 2 → limite 12, 4 passa); a
+    // percentual cobre escalas grandes (pendência 100 → limite 130, 200
+    // dispara). Apenas linhas que CRUZAM o limite viram anomalia.
+    const anomalias: LinhaRetornoAnormal[] = [];
+    for (const [itemId, qtd] of propostaPorItem) {
+      if (qtd <= 0) continue;
+      const pendAtual = pendenciaPorItemAtual.get(itemId) ?? 0;
+      const pendAnt = pendenciaAnteriorPorItem.get(itemId) ?? 0;
+      const pendenciaTotal = pendAtual + pendAnt;
+      const limite = pendenciaTotal + Math.max(10, Math.floor(pendenciaTotal * 0.3));
+      if (qtd > limite) {
+        let nomeItem = nomePorItem.get(itemId);
+        if (!nomeItem) {
+          const meta = await this.itens.porId(itemId);
+          nomeItem = meta?.nome ?? String(itemId);
+        }
+        anomalias.push({
+          itemId,
+          nomeItem,
+          proposto: qtd,
+          pendenciaTotal,
+          limiteAceitavel: limite,
+          excedenteProjetado: qtd - pendenciaTotal,
+        });
+      }
+    }
+    if (anomalias.length > 0 && !input.confirmacaoAnormalidade) {
+      throw new RetornoAnormalDetectadoError(anomalias);
+    }
+
+    // Distribui cada item proposto entre: (1) lote atual, (2) lotes
+    // anteriores AINDA abertos com pendência do mesmo item (FIFO por
+    // dataEnvio), (3) excedente avulso (loteId=null). O movService valida
+    // saldo de lavanderia no momento de gravar — se fisicamente não couber,
+    // a falha cai com EstoqueInsuficienteError com mensagem amigável.
+    const distribuicao: DistribuicaoItemRetorno[] = [];
+    for (const [itemId, qtd] of propostaPorItem) {
+      if (qtd <= 0) continue;
+      const pendenciaAtual = pendenciaPorItemAtual.get(itemId) ?? 0;
+      const alocacoes = await this.planejarDistribuicaoItem(
+        itemId,
+        qtd,
+        input.loteId,
+        detalheAtual.lote.codigo,
+        pendenciaAtual,
+      );
+      const quitadoLoteAtual = Math.min(qtd, pendenciaAtual);
+      let abatidoEmAnteriores = 0;
+      let excedente = 0;
+      for (const a of alocacoes) {
+        if (a.loteId == null) excedente += a.quantidade;
+        else if (a.loteId !== input.loteId) abatidoEmAnteriores += a.quantidade;
+      }
+      // Se o item nem aparece no lote atual, "quitadoLoteAtual" fica 0
+      // mas o alocador já mandou tudo pra anteriores/excedente. Resolve
+      // o nome via repositório de itens só quando precisar (não está em
+      // detalheAtual.itens).
+      let nomeItem = nomePorItem.get(itemId);
+      if (!nomeItem) {
+        const meta = await this.itens.porId(itemId);
+        nomeItem = meta?.nome ?? String(itemId);
+      }
+      distribuicao.push({
+        itemId,
+        nomeItem,
+        quantidadeRetornada: qtd,
+        quitadoLoteAtual,
+        abatidoEmAnteriores,
+        excedente,
+        alocacoes,
+      });
+    }
+
+    // Linhas com pendência residual (após propor) APENAS no lote atual.
+    // Excesso vai pra anteriores/excedente sem virar divergência aqui.
     const divergenciasResiduais: LinhaDivergencia[] = [];
     for (const item of detalheAtual.itens) {
       const proposto = propostaPorItem.get(item.itemId) ?? 0;
-      if (proposto > item.pendenciaEfetiva) {
-        throw new ValidationError(
-          `Quantidade retornada de "${item.nomeItem}" (${proposto}) excede o pendente (${item.pendenciaEfetiva}).`,
-        );
-      }
-      const residual = item.pendenciaEfetiva - proposto;
+      const aplicadoNoAtual = Math.min(proposto, item.pendenciaEfetiva);
+      const residual = item.pendenciaEfetiva - aplicadoNoAtual;
       if (residual > 0) {
         divergenciasResiduais.push({
           itemId: item.itemId,
           nomeItem: item.nomeItem,
           enviado: item.totalEnviado,
-          retornado: item.totalRetornado + proposto,
+          retornado: item.totalRetornado + aplicadoNoAtual,
           diferenca: residual,
         });
       }
@@ -491,8 +627,135 @@ export class LoteLavanderiaService {
       }
     }
 
-    // Caminho 1: grava o retorno (mesmo path do registrarRetorno legado).
-    await this.registrarRetorno(input);
+    // Caminho 1: grava as movs conforme a distribuição calculada. Cada
+    // alocação vira um retorno_lavanderia separado, com loteId apontando
+    // pro lote-destino contábil (ou null pra excedente avulso). O
+    // movService aplica saldo lavanderia em sequência — se sobra física
+    // não cobrir, falha amigável.
+    //
+    // Concorrência: re-lemos a pendência do lote-anterior IMEDIATAMENTE
+    // antes de gravar cada alocação. Se outro recebimento concorrente
+    // quitou aquela pendência entre o pré-cálculo e este ponto, a sobra
+    // dessa alocação é redirecionada pra excedente (não conciliado) em
+    // vez de duplicar a baixa.
+    //
+    // ATENÇÃO TÉCNICA: esse re-read REDUZ o risco mas NÃO substitui
+    // transação real ou advisory lock — uma race entre o re-read e o
+    // movService.registrar ainda existe (janela menor, mas existe). Se
+    // futuramente houver concorrência relevante, a forma correta é mover
+    // este caminho pra uma RPC do Postgres com BEGIN/COMMIT (ou advisory
+    // lock por (item_id, lote_id)) — ver MovimentacaoRepository.
+    const dataRetorno = input.dataRetorno ?? this.clock.agoraISO();
+    for (const item of distribuicao) {
+      // `excedenteAdicional` capta a sobra que VEIO de uma alocação anterior
+      // que perdeu pendência entre pré-cálculo e gravação. Vai virar uma
+      // mov extra com loteId=null e conciliado=false ao final do item.
+      let excedenteAdicional = 0;
+      for (const alocacao of item.alocacoes) {
+        if (alocacao.quantidade <= 0) continue;
+
+        let qtdAGravar = alocacao.quantidade;
+        let loteAlvo = alocacao.loteId;
+        let codigoAlvo = alocacao.loteCodigo;
+
+        // Re-leitura defensiva apenas para alocações em lote ANTERIOR
+        // (não pro atual — esse já foi lido nesta requisição; e não pro
+        // excedente — não tem pendência a checar).
+        if (loteAlvo != null && loteAlvo !== input.loteId) {
+          const detAnt = await this.detalhe(loteAlvo);
+          if (detAnt) {
+            const linhaAnt = detAnt.itens.find((i) => i.itemId === item.itemId);
+            const pendAtualAnt = linhaAnt?.pendenciaEfetiva ?? 0;
+            if (pendAtualAnt < qtdAGravar) {
+              const sobra = qtdAGravar - pendAtualAnt;
+              qtdAGravar = pendAtualAnt;
+              excedenteAdicional += sobra;
+            }
+          }
+        }
+
+        if (qtdAGravar > 0) {
+          const obs =
+            loteAlvo == null
+              ? `Retorno avulso (excedente operacional não conciliado) — recebimento de ${detalheAtual.lote.codigo}` +
+                (input.observacao?.trim() ? ` — obs: ${input.observacao.trim()}` : '')
+              : loteAlvo !== input.loteId
+                ? `Retorno aplicado a pendência anterior do lote ${codigoAlvo ?? loteAlvo} (recebido junto a ${detalheAtual.lote.codigo})`
+                : (input.observacao ?? null);
+          await this.movService.registrar({
+            itemId: item.itemId,
+            quantidade: qtdAGravar,
+            tipo: 'retorno_lavanderia',
+            origemId: detalheAtual.lote.destinoId,
+            destinoId: detalheAtual.lote.origemId,
+            responsavel: input.responsavel,
+            dataHora: dataRetorno,
+            loteId: loteAlvo,
+            observacao: obs,
+            // Apenas o canal excedente (loteId=null) é não conciliado.
+            conciliado: loteAlvo != null,
+          });
+        }
+      }
+
+      // Sobra acumulada por race nas alocações anteriores → vira excedente
+      // adicional (não conciliado), com a mesma rastreabilidade.
+      if (excedenteAdicional > 0) {
+        const obs =
+          `Retorno avulso (excedente operacional não conciliado, redistribuído por race) — recebimento de ${detalheAtual.lote.codigo}` +
+          (input.observacao?.trim() ? ` — obs: ${input.observacao.trim()}` : '');
+        await this.movService.registrar({
+          itemId: item.itemId,
+          quantidade: excedenteAdicional,
+          tipo: 'retorno_lavanderia',
+          origemId: detalheAtual.lote.destinoId,
+          destinoId: detalheAtual.lote.origemId,
+          responsavel: input.responsavel,
+          dataHora: dataRetorno,
+          loteId: null,
+          observacao: obs,
+          conciliado: false,
+        });
+      }
+
+      // Reflete o ajuste por race na própria estrutura `distribuicao` que
+      // a UI consome — caso contrário o banner falaria "0 excedente"
+      // mesmo tendo gerado uma mov não conciliada.
+      const excedenteFinal = item.excedente + excedenteAdicional;
+      const abatidoFinal = item.abatidoEmAnteriores - excedenteAdicional;
+      (item as {
+        excedente: number;
+        abatidoEmAnteriores: number;
+      }).excedente = excedenteFinal;
+      (item as {
+        excedente: number;
+        abatidoEmAnteriores: number;
+      }).abatidoEmAnteriores = abatidoFinal < 0 ? 0 : abatidoFinal;
+
+      // Log estruturado para auditoria nos primeiros dias após deploy.
+      // Aparece em Logs → Functions da Vercel — admin consegue grep por
+      // "EXCEDENTE_OPERACIONAL_NAO_CONCILIADO" e revisar todos os casos
+      // sem precisar consultar o banco.
+      if (excedenteFinal > 0) {
+        const pendAtualLog = pendenciaPorItemAtual.get(item.itemId) ?? 0;
+        const pendAntLog = pendenciaAnteriorPorItem.get(item.itemId) ?? 0;
+        console.warn('EXCEDENTE_OPERACIONAL_NAO_CONCILIADO', {
+          tag: 'EXCEDENTE_OPERACIONAL_NAO_CONCILIADO',
+          itemId: item.itemId,
+          nomeItem: item.nomeItem,
+          quantidadeRetornada: item.quantidadeRetornada,
+          quitadoLoteAtual: item.quitadoLoteAtual,
+          abatidoEmAnteriores: item.abatidoEmAnteriores,
+          excedenteNaoConciliado: excedenteFinal,
+          pendenciaTotalEncontrada: pendAtualLog + pendAntLog,
+          responsavel: input.responsavel,
+          loteAtualId: input.loteId,
+          loteAtualCodigo: detalheAtual.lote.codigo,
+          observacaoOperador: input.observacao ?? null,
+          timestamp: dataRetorno,
+        });
+      }
+    }
 
     // Caminho 2: sem divergência ou retorno parcial → não fecha. Done.
     if (!haDivergencia) {
@@ -500,6 +763,7 @@ export class LoteLavanderiaService {
         status: 'registrado_sem_pendencia',
         pendenciaResidual: 0,
         fechado: false,
+        distribuicao,
       };
     }
     if (input.classificacao === 'retorno_parcial') {
@@ -507,6 +771,7 @@ export class LoteLavanderiaService {
         status: 'registrado_parcial',
         pendenciaResidual: divergenciasResiduais.reduce((s, l) => s + l.diferenca, 0),
         fechado: false,
+        distribuicao,
       };
     }
 
@@ -530,7 +795,100 @@ export class LoteLavanderiaService {
       status: 'concluido_com_divergencia',
       pendenciaResidual: divergenciasResiduais.reduce((s, l) => s + l.diferenca, 0),
       fechado: true,
+      distribuicao,
     };
+  }
+
+  // Soma a pendência efetiva por item considerando TODOS os lotes abertos
+  // (exceto o lote atual), agrupando por itemId. Usado pelo detector de
+  // anomalia pra estabelecer o "limite aceitável" do retorno proposto e
+  // pelo planejador FIFO. Lê uma vez antes do loop pra evitar O(N²).
+  private async somarPendenciaAnterioresPorItem(
+    loteAtualId: LoteId,
+  ): Promise<Map<ItemId, number>> {
+    const acc = new Map<ItemId, number>();
+    const abertos = await this.listar({ apenasAbertos: true });
+    const candidatos = abertos.filter(
+      (r) => r.lote.id !== loteAtualId && !r.encerrado,
+    );
+    for (const cand of candidatos) {
+      const det = await this.detalhe(cand.lote.id);
+      if (!det) continue;
+      for (const linha of det.itens) {
+        if (linha.pendenciaEfetiva <= 0) continue;
+        acc.set(
+          linha.itemId,
+          (acc.get(linha.itemId) ?? 0) + linha.pendenciaEfetiva,
+        );
+      }
+    }
+    return acc;
+  }
+
+  // Calcula a distribuição de uma quantidade retornada de UM item entre:
+  //   1. Lote atual (até a pendência efetiva dele)
+  //   2. Lotes ainda abertos com pendência do mesmo item (FIFO por dataEnvio)
+  //   3. Excedente avulso (loteId=null) — só sobra quando não há mais
+  //      pendência aberta em qualquer lote
+  //
+  // Retorna o array ordenado de alocações. Apenas alocações com
+  // quantidade>0 entram no resultado. O caller é responsável por traduzir
+  // cada alocação em uma movimentação (retorno_lavanderia).
+  private async planejarDistribuicaoItem(
+    itemId: ItemId,
+    qtdTotal: number,
+    loteAtualId: LoteId,
+    loteAtualCodigo: string,
+    pendenciaEfetivaAtual: number,
+  ): Promise<AlocacaoRetorno[]> {
+    if (qtdTotal <= 0) return [];
+    const alocacoes: AlocacaoRetorno[] = [];
+    let restante = qtdTotal;
+
+    const noAtual = Math.min(restante, Math.max(0, pendenciaEfetivaAtual));
+    if (noAtual > 0) {
+      alocacoes.push({
+        loteId: loteAtualId,
+        loteCodigo: loteAtualCodigo,
+        quantidade: noAtual,
+      });
+      restante -= noAtual;
+    }
+
+    if (restante <= 0) return alocacoes;
+
+    // Coleta lotes anteriores AINDA abertos (não encerrados) com pendência
+    // do mesmo item. FIFO por dataEnvio resolve "sobra mais antiga primeiro" —
+    // pareando com a intuição contábil de quitar dívida mais velha primeiro.
+    const abertos = await this.listar({ apenasAbertos: true });
+    const candidatos = abertos
+      .filter((r) => r.lote.id !== loteAtualId && !r.encerrado)
+      .slice()
+      .sort((a, b) => a.lote.dataEnvio.localeCompare(b.lote.dataEnvio));
+
+    for (const candidato of candidatos) {
+      if (restante <= 0) break;
+      const det = await this.detalhe(candidato.lote.id);
+      if (!det) continue;
+      const linha = det.itens.find((i) => i.itemId === itemId);
+      if (!linha || linha.pendenciaEfetiva <= 0) continue;
+      const aAlocar = Math.min(restante, linha.pendenciaEfetiva);
+      alocacoes.push({
+        loteId: candidato.lote.id,
+        loteCodigo: candidato.lote.codigo,
+        quantidade: aAlocar,
+      });
+      restante -= aAlocar;
+    }
+
+    if (restante > 0) {
+      alocacoes.push({
+        loteId: null,
+        loteCodigo: null,
+        quantidade: restante,
+      });
+    }
+    return alocacoes;
   }
 
   // Diagnóstico pré-encerramento. Útil para a UI mostrar avisos no modal
@@ -678,6 +1036,84 @@ export class LoteLavanderiaService {
       motivoFechamento: input.motivo,
       motivoDescricao: descFinal,
       origemDivergencia: input.origemDivergencia ?? null,
+    };
+    await this.lotes.atualizar(loteAtualizado);
+  }
+
+  // Cancelamento de lote por DUPLICAÇÃO ou erro grave de registro.
+  // Semanticamente diferente de `encerrarComPendencia`:
+  //
+  //   encerrarComPendencia  → "lote real, mas algumas peças não voltaram"
+  //                            cria ajustes (baixa saldo) + conta como perda
+  //
+  //   cancelarLoteDuplicado → "este lote nunca deveria ter sido criado"
+  //                            cancela TODAS as movs do lote + NÃO conta
+  //                            como perda (RelatorioPerdaService filtra)
+  //
+  // Funciona em qualquer estado do lote:
+  //   - Aberto: cancela só os envio_lavanderia
+  //   - Encerrado anteriormente como perda: cancela envios E ajustes que
+  //     o encerrarComPendencia havia criado — reverte completamente o
+  //     impacto contábil
+  //
+  // Após o cancelamento, o lote some de TODOS os agregados (peças hoje,
+  // valor hoje, saldo de lavanderia, perdas), porque `marcarCancelada`
+  // remove a mov de toda projeção que filtra por incluirCanceladas=false
+  // (default).
+  async cancelarLoteDuplicado(input: {
+    loteId: LoteId;
+    motivo: string;
+    responsavel: string;
+  }): Promise<void> {
+    if (!input.motivo?.trim()) {
+      throw new ValidationError(
+        'Motivo do cancelamento é obrigatório (ex.: "duplicação do lote L-002").',
+      );
+    }
+    if (!input.responsavel?.trim()) {
+      throw new ValidationError('Responsável é obrigatório');
+    }
+
+    const lote = await this.lotes.porId(input.loteId);
+    if (!lote) throw new NotFoundError('Lote', input.loteId);
+
+    // Idempotência: se já foi cancelado como duplicado, no-op silencioso.
+    if (lote.motivoFechamento === 'duplicado') return;
+
+    const agora = this.clock.agoraISO();
+    const motivoTrim = input.motivo.trim();
+    const responsavelTrim = input.responsavel.trim();
+
+    // Cancela TODAS as movs ativas vinculadas ao lote — envios e
+    // eventuais ajustes criados por encerrarComPendencia anterior.
+    // `marcarCancelada` é idempotente por mov (rejeita se já cancelada),
+    // então filtramos por não-canceladas pra evitar throw indesejado.
+    const movs = await this.movimentacoes.listar({
+      loteId: input.loteId,
+      incluirCanceladas: false,
+    });
+    const observacaoCancelamento = `Lote cancelado (duplicado): ${motivoTrim}`;
+    for (const mov of movs) {
+      await this.movimentacoes.marcarCancelada(mov.id, {
+        canceladoEm: agora,
+        canceladoPor: responsavelTrim,
+        motivoCancelamento: observacaoCancelamento,
+      });
+    }
+
+    // Atualiza header com motivo='duplicado'. Funciona se o lote já
+    // estava encerrado (substitui o motivo anterior, ex.: 'erro_operacional')
+    // ou se estava aberto (preenche encerradoEm pela primeira vez).
+    // CHECK lotes_encerramento_consistente é satisfeito (3 campos preenchidos).
+    const loteAtualizado: Lote = {
+      ...lote,
+      encerradoEm: lote.encerradoEm ?? agora,
+      encerradoPor: responsavelTrim,
+      motivoFechamento: 'duplicado',
+      motivoDescricao: motivoTrim,
+      // Origem da divergência não se aplica a duplicação — limpa pra
+      // não confundir relatórios futuros que cruzem por origem.
+      origemDivergencia: null,
     };
     await this.lotes.atualizar(loteAtualizado);
   }

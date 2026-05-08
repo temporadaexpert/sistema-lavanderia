@@ -5,6 +5,7 @@ import { divergenciaPorLoteComContato } from '@/app/_lib/divergenciaData';
 import { contatosPorLote } from '@/app/_lib/contatoData';
 import { MOTIVO_LABEL } from '@/app/_lib/motivos';
 import { EncerrarLoteDialog } from '@/app/_components/EncerrarLoteDialog';
+import { CancelarLoteDuplicadoDialog } from '@/app/_components/CancelarLoteDuplicadoDialog';
 import { RegistrarContatoDialog } from '@/app/_components/RegistrarContatoDialog';
 import { LoteId } from '@/domain/types/ids';
 import type {
@@ -348,6 +349,21 @@ export default async function LoteDetalhe({ params }: PageProps) {
               risco={risco}
             />
           )}
+        </div>
+      )}
+
+      {/* Cancelamento por duplicação/erro grave — disponível em QUALQUER
+          estado do lote, exceto se já foi cancelado como duplicado
+          (idempotente). Admin pode descobrir DEPOIS de ter encerrado
+          como perda que era duplicado e querer reverter o "Perdas no mês". */}
+      {lote.motivoFechamento !== 'duplicado' && (
+        <div className={styles.acoesDestrutivas}>
+          <CancelarLoteDuplicadoDialog
+            loteId={lote.id}
+            loteCodigo={lote.codigo}
+            jaEncerrado={detalhe.encerrado}
+            totalEnviado={detalhe.totalEnviado}
+          />
         </div>
       )}
 

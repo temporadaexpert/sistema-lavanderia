@@ -84,6 +84,7 @@ describe('RelatorioLavanderiaService', () => {
       canceladoEm: null,
       canceladoPor: null,
       motivoCancelamento: null,
+      conciliado: true,
     });
     const resumo = await c.relatorioLavanderia.resumo();
     // Fallback para preço atual = 30. Custo = 300.

@@ -32,6 +32,10 @@ const LABEL_MOTIVO: Record<MotivoFechamento, string> = {
   extravio: 'Extravio',
   erro_operacional: 'Erro operacional',
   outros: 'Outros (descrever)',
+  // 'duplicado' NÃO entra neste dialog — usar CancelarLoteDuplicadoDialog.
+  // Mantemos no Record por exigência de Record<MotivoFechamento, string>;
+  // a opção é filtrada da lista renderizada (MOTIVOS_FECHAMENTO_ENCERRAVEIS).
+  duplicado: 'Duplicado (use Cancelar lote)',
 };
 
 const DESCRICAO_MOTIVO: Record<MotivoFechamento, string> = {
@@ -40,7 +44,14 @@ const DESCRICAO_MOTIVO: Record<MotivoFechamento, string> = {
   extravio: 'Peças extraviadas (perdidas em trânsito, roubo, etc).',
   erro_operacional: 'Erro de contagem no envio, lançamento duplicado, etc.',
   outros: 'Outro motivo — descreva em detalhes abaixo.',
+  duplicado: '', // não usado neste dialog
 };
+
+// Motivos válidos pra encerrar com pendência (gera ajuste, conta como
+// perda). Exclui 'duplicado' — duplicação NÃO é perda real.
+const MOTIVOS_FECHAMENTO_ENCERRAVEIS = MOTIVOS_FECHAMENTO.filter(
+  (m) => m !== 'duplicado',
+);
 
 export function EncerrarLoteDialog({
   loteId,
@@ -191,7 +202,7 @@ export function EncerrarLoteDialog({
               <option value="" disabled>
                 Selecione o motivo…
               </option>
-              {MOTIVOS_FECHAMENTO.map((m) => (
+              {MOTIVOS_FECHAMENTO_ENCERRAVEIS.map((m) => (
                 <option key={m} value={m}>
                   {LABEL_MOTIVO[m]}
                 </option>

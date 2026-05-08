@@ -283,6 +283,11 @@ export class RelatorioPerdaService {
     const todosLotes = await this.lotes.listar();
     const lotesEncerrados = todosLotes.filter((l) => {
       if (!l.encerradoEm || !l.motivoFechamento) return false;
+      // 'duplicado' significa "lote nunca deveria ter existido". Foi
+      // cancelado via cancelarLoteDuplicado, que cancelou todas as movs
+      // (envios + ajustes prévios). NÃO é perda real — exclui dos
+      // relatórios pra não inflar 'Perdas no mês' fictícias.
+      if (l.motivoFechamento === 'duplicado') return false;
       if (filtro.desde && l.encerradoEm < filtro.desde) return false;
       if (filtro.ate && l.encerradoEm > filtro.ate) return false;
       return true;

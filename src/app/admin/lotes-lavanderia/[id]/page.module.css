@@ -718,3 +718,13 @@
   line-height: 1.5;
   color: #5c140f;
 }
+
+/* Container das ações administrativas destrutivas (cancelamento por
+   duplicação). Visualmente discreto — não compete com o fluxo principal. */
+.acoesDestrutivas {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  padding: 12px 0;
+  border-top: 1px dashed var(--border);
+}

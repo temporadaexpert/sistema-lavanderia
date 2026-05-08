@@ -25,12 +25,19 @@ export type LoteStatus = (typeof LOTE_STATUS)[number];
 
 // Motivos de encerramento com pendência. 'outros' exige descrição livre.
 // Lista fechada para permitir relatórios agrupados por motivo no admin.
+//
+// IMPORTANTE: 'duplicado' é semanticamente DIFERENTE — significa que o
+// lote nunca deveria ter existido (lançamento duplicado, erro grave de
+// registro). Relatórios de perda EXCLUEM esse valor (RelatorioPerdaService).
+// O fluxo de cancelamento (LoteLavanderiaService.cancelarLoteDuplicado)
+// cancela todas as movs do lote em vez de criar ajustes.
 export const MOTIVOS_FECHAMENTO = [
   'perda_confirmada',
   'danificado',
   'extravio',
   'erro_operacional',
   'outros',
+  'duplicado',
 ] as const;
 export type MotivoFechamento = (typeof MOTIVOS_FECHAMENTO)[number];
 

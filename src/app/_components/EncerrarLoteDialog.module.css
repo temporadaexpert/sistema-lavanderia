@@ -230,3 +230,23 @@
 .botaoPrimario:hover:not(:disabled) {
   background: #9e2d20;
 }
+
+/* Botão "Cancelar lote (duplicação/erro)" — variante destrutiva neutra,
+   visualmente distinto do botão de encerramento (que é vermelho/perda). */
+.botaoCancelarDuplicado {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+
+.botaoCancelarDuplicado:hover {
+  border-color: #6b7280;
+  color: #1f2937;
+  background: #f9fafb;
+}

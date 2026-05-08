@@ -119,3 +119,39 @@ export class DivergenciaDiariaDetectadaError extends RegraNegocioError {
     this.totalExcedente = totalExcedente;
   }
 }
+
+// Linha de retorno anormal exposta ao caller. Contém os números crus que
+// dispararam o alerta — UI renderiza modal âmbar com texto comparativo.
+export interface LinhaRetornoAnormal {
+  readonly itemId: string;
+  readonly nomeItem: string;
+  readonly proposto: number;
+  readonly pendenciaTotal: number;     // atual + pendências abertas anteriores do mesmo item
+  readonly limiteAceitavel: number;    // pendenciaTotal + max(10, pendenciaTotal*0.3)
+  readonly excedenteProjetado: number; // proposto - pendenciaTotal (>0)
+}
+
+// Sinaliza que o operador propôs uma quantidade absurdamente acima da
+// pendência total possível (atual + lotes anteriores abertos do mesmo
+// item) — provável erro de digitação (250 em vez de 25). NÃO é erro
+// fatal — é guarda-chuva pra forçar confirmação consciente. UI deve
+// abrir modal âmbar e re-submeter com `confirmacaoAnormalidade=true`.
+//
+// Regra de anomalia (linha-a-linha):
+//   proposto > pendenciaTotal + max(10, pendenciaTotal * 0.3)
+//
+// Mantém pequenas sobras legítimas passando sem alerta (ex.: pendência 2,
+// proposto 4 não dispara: 4 ≤ 2 + 10 = 12) e bloqueia digitações absurdas
+// independentemente da escala (pendência 100, proposto 200 dispara: 200
+// > 100 + 30 = 130).
+export class RetornoAnormalDetectadoError extends RegraNegocioError {
+  readonly anomalias: readonly LinhaRetornoAnormal[];
+  constructor(anomalias: readonly LinhaRetornoAnormal[]) {
+    const totalExc = anomalias.reduce((s, l) => s + l.excedenteProjetado, 0);
+    super(
+      'RETORNO_ANORMAL_DETECTADO',
+      `Retorno muito acima do esperado em ${anomalias.length} item(ns) (${totalExc} peça(s) excederiam a pendência). Confirme antes de gravar.`,
+    );
+    this.anomalias = anomalias;
+  }
+}

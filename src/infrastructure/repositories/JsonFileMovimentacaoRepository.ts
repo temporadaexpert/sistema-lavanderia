@@ -45,6 +45,7 @@ export class JsonFileMovimentacaoRepository implements MovimentacaoRepository {
             precoUnitarioSnapshot:
               (m as { precoUnitarioSnapshot?: number | null }).precoUnitarioSnapshot ??
               null,
+            conciliado: (m as { conciliado?: boolean }).conciliado ?? true,
           }) as Movimentacao,
       );
     })();

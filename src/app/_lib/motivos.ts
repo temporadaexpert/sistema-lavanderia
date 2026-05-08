@@ -9,4 +9,5 @@ export const MOTIVO_LABEL: Record<MotivoFechamento, string> = {
   extravio: 'Extravio',
   erro_operacional: 'Erro operacional',
   outros: 'Outros',
+  duplicado: 'Duplicado (cancelado)',
 };

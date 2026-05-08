@@ -109,6 +109,7 @@ export class MovimentacaoService {
       canceladoEm: null,
       canceladoPor: null,
       motivoCancelamento: null,
+      conciliado: input.conciliado ?? true,
     };
 
     await this.movimentacoes.registrar(mov);

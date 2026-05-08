@@ -2,8 +2,14 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { LoteResumo } from '@/application/services/LoteLavanderiaService';
-import type { LinhaDivergencia } from '@/domain/errors/DomainErrors';
+import type {
+  DistribuicaoItemRetorno,
+  LoteResumo,
+} from '@/application/services/LoteLavanderiaService';
+import type {
+  LinhaDivergencia,
+  LinhaRetornoAnormal,
+} from '@/domain/errors/DomainErrors';
 import { registrarRetornoLoteAction, type AcaoResultado } from '../_lib/actions';
 import styles from './OperacaoForm.module.css';
 
@@ -85,6 +91,13 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
   const [responsavelFechamento, setResponsavelFechamento] = useState('');
   const [erroModal, setErroModal] = useState<string | null>(null);
 
+  // Modal de anomalia (retorno absurdamente alto). Independente do modal
+  // de divergência — abre antes, exige confirmação consciente do operador
+  // e re-submete com `confirmacaoAnormalidade=true`.
+  const [anomalias, setAnomalias] = useState<readonly LinhaRetornoAnormal[]>([]);
+  const [anormalidadeConfirmada, setAnormalidadeConfirmada] = useState(false);
+  const dialogAnomaliaRef = useRef<HTMLDialogElement>(null);
+
   // Origem é exigida quando a classificação FECHA o lote (5 das 6 opções).
   // Para 'retorno_parcial' fica opcional — nada de divergência consolidada
   // ainda. UI esconde/mostra "obrigatório" baseado nisso.
@@ -108,6 +121,9 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
     for (const l of linhas) inicial[l.itemId] = String(l.pendencia);
     setQuantidades(inicial);
     setResultado(null);
+    // Trocou de lote → invalida confirmação prévia de anomalia (anomalia
+    // é por submissão, não por sessão).
+    setAnormalidadeConfirmada(false);
   }
 
   function aoMudarQtd(itemId: string, valor: string) {
@@ -116,12 +132,16 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
 
   // Submete o form. Se `extras` for passado, inclui campos do modal de
   // classificação (2ª submissão após o operador justificar a divergência).
+  // `confirmacaoAnormalidade` é flag separada do classificação — pode vir
+  // sozinha (operador confirmou retorno alto sem haver divergência) ou
+  // junto (cenário raro: retorno alto E divergência simultaneamente).
   async function submeter(
     extras?: {
-      classificacao: ClassValor;
-      origemDivergencia: OrigemValor | '';
-      motivoDescricao: string;
-      responsavelFechamento: string;
+      classificacao?: ClassValor;
+      origemDivergencia?: OrigemValor | '';
+      motivoDescricao?: string;
+      responsavelFechamento?: string;
+      confirmacaoAnormalidade?: boolean;
     },
   ): Promise<AcaoResultado> {
     const form = formRef.current;
@@ -130,11 +150,21 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
     }
     const formData = new FormData(form);
     if (extras) {
-      formData.set('classificacao', extras.classificacao);
-      formData.set('motivoDescricao', extras.motivoDescricao);
-      formData.set('responsavelFechamento', extras.responsavelFechamento);
-      // Origem só vai quando preenchida — string vazia = service trata como null.
-      formData.set('origemDivergencia', extras.origemDivergencia);
+      if (extras.classificacao) {
+        formData.set('classificacao', extras.classificacao);
+      }
+      if (extras.motivoDescricao !== undefined) {
+        formData.set('motivoDescricao', extras.motivoDescricao);
+      }
+      if (extras.responsavelFechamento !== undefined) {
+        formData.set('responsavelFechamento', extras.responsavelFechamento);
+      }
+      if (extras.origemDivergencia !== undefined) {
+        formData.set('origemDivergencia', extras.origemDivergencia);
+      }
+      if (extras.confirmacaoAnormalidade) {
+        formData.set('confirmacaoAnormalidade', 'on');
+      }
     }
     return registrarRetornoLoteAction(formData);
   }
@@ -144,7 +174,21 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
     setResultado(null);
     setLoading(true);
     try {
-      const r = await submeter();
+      // Se o operador já confirmou anomalia nesta submissão, mantém a
+      // flag — caso contrário cada re-submit dispararia o modal de novo.
+      const r = await submeter(
+        anormalidadeConfirmada ? { confirmacaoAnormalidade: true } : undefined,
+      );
+      // Anomalia (retorno muito acima do esperado) tem prioridade: o
+      // operador precisa confirmar o número antes de qualquer outra
+      // classificação. Após confirmar, o re-submit pode ainda cair em
+      // divergência → outro modal.
+      if (!r.ok && r.code === 'RETORNO_ANORMAL_DETECTADO' && 'anomalias' in r) {
+        setAnomalias(r.anomalias);
+        setErroModal(null);
+        dialogAnomaliaRef.current?.showModal();
+        return;
+      }
       // Caminho do bug original: o sistema detectava divergência mas não
       // oferecia caminho pra concluir. Agora abrimos modal automaticamente.
       // (`'divergencias' in r` narrows o discriminated union — só a variante
@@ -168,11 +212,55 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
         setLoteSelecionado('');
         setQuantidades({});
         formRef.current?.reset();
+        setAnormalidadeConfirmada(false);
         router.refresh();
       }
     } finally {
       setLoading(false);
     }
+  }
+
+  async function confirmarAnormalidade() {
+    setLoading(true);
+    setErroModal(null);
+    setAnormalidadeConfirmada(true);
+    try {
+      const r = await submeter({ confirmacaoAnormalidade: true });
+      // Após confirmar anomalia, ainda pode haver divergência (proposto
+      // alto não exclui faltas em outros itens). Cai no fluxo do segundo
+      // modal nesse caso.
+      if (!r.ok && r.code === 'DIVERGENCIA_DETECTADA' && 'divergencias' in r) {
+        dialogAnomaliaRef.current?.close();
+        setAnomalias([]);
+        setDivergencias(r.divergencias);
+        setClassificacao('');
+        setOrigemDivergencia('');
+        setMotivoDescricao('');
+        setResponsavelFechamento(
+          (formRef.current?.elements.namedItem('responsavel') as HTMLInputElement | null)
+            ?.value ?? '',
+        );
+        dialogRef.current?.showModal();
+        return;
+      }
+      dialogAnomaliaRef.current?.close();
+      setAnomalias([]);
+      setResultado(r);
+      if (r.ok) {
+        setLoteSelecionado('');
+        setQuantidades({});
+        formRef.current?.reset();
+        router.refresh();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function fecharModalAnomalia() {
+    if (loading) return;
+    dialogAnomaliaRef.current?.close();
+    setAnomalias([]);
   }
 
   async function confirmarComJustificativa(e: React.FormEvent<HTMLFormElement>) {
@@ -203,6 +291,7 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
         origemDivergencia,
         motivoDescricao: motivoDescricao.trim(),
         responsavelFechamento: responsavelFechamento.trim(),
+        confirmacaoAnormalidade: anormalidadeConfirmada,
       });
       if (!r.ok) {
         setErroModal(r.error);
@@ -212,6 +301,7 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
       dialogRef.current?.close();
       setResultado(r);
       setDivergencias([]);
+      setAnormalidadeConfirmada(false);
       setLoteSelecionado('');
       setQuantidades({});
       formRef.current?.reset();
@@ -360,7 +450,73 @@ export function FormReceberLavanderia({ lotesAbertos, pendenciasPorLote }: Props
               : resultado.error}
           </div>
         )}
+
+        {resultado?.ok && resultado.distribuicao && (
+          <RedistribuicaoBanner distribuicao={resultado.distribuicao} />
+        )}
       </form>
+
+      {/* Modal âmbar de ANOMALIA. Não bloqueia perda real — bloqueia
+          erro de digitação grosseiro (ex.: 250 em vez de 25). Operador
+          revisa o número, e confirma OU volta. Estilo cosmético âmbar
+          (não vermelho) — alerta de atenção, não de erro fatal. */}
+      <dialog ref={dialogAnomaliaRef} className={styles.modal}>
+        <div className={styles.modalForm}>
+          <header className={styles.modalHeader}>
+            <h3 className={styles.modalTitulo}>
+              <span className={styles.modalIconeAtencao} aria-hidden>?</span>
+              Retorno acima do esperado
+            </h3>
+            <button
+              type="button"
+              onClick={fecharModalAnomalia}
+              className={styles.modalFecharX}
+              aria-label="Fechar"
+              disabled={loading}
+            >
+              ×
+            </button>
+          </header>
+
+          <div className={styles.modalAvisoAtencao}>
+            <p>
+              Atenção: a quantidade informada está bem acima da pendência
+              total disponível. Confirme se o número está correto antes de
+              prosseguir — pode ser erro de digitação.
+            </p>
+            <ul className={styles.modalLista}>
+              {anomalias.map((a) => (
+                <li key={a.itemId}>
+                  <strong>{a.nomeItem}</strong>: você informou{' '}
+                  <strong>{a.proposto}</strong>, mas a pendência total é{' '}
+                  {a.pendenciaTotal} (limite aceitável: {a.limiteAceitavel}).
+                  {' '}Se prosseguir, <strong>{a.excedenteProjetado}</strong>{' '}
+                  ficaria como excedente operacional não conciliado.
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className={styles.modalAcoes}>
+            <button
+              type="button"
+              onClick={fecharModalAnomalia}
+              className={styles.modalBotaoSecundario}
+              disabled={loading}
+            >
+              Voltar e revisar
+            </button>
+            <button
+              type="button"
+              onClick={confirmarAnormalidade}
+              className={styles.modalBotaoPrimario}
+              disabled={loading}
+            >
+              {loading ? 'Confirmando…' : 'Confirmo, prosseguir'}
+            </button>
+          </div>
+        </div>
+      </dialog>
 
       {/* Modal de classificação obrigatório quando há divergência sem
           motivo. O operador NÃO pode avançar sem escolher uma das 6
@@ -515,4 +671,70 @@ function formatarData(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => n.toString().padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+// Aviso informativo (azul-claro, NÃO vermelho) que aparece quando o
+// retorno foi redistribuído — operador devolveu mais peças do que a
+// pendência atual do lote, e o sistema abateu em pendências anteriores
+// do mesmo item ou registrou como excedente avulso. Só renderiza linhas
+// que tiveram redistribuição efetiva (anterior ou excedente > 0).
+function RedistribuicaoBanner({
+  distribuicao,
+}: {
+  distribuicao: readonly DistribuicaoItemRetorno[];
+}) {
+  const linhasComRedistribuicao = distribuicao.filter(
+    (d) => d.abatidoEmAnteriores > 0 || d.excedente > 0,
+  );
+  if (linhasComRedistribuicao.length === 0) return null;
+  return (
+    <div className={styles.infoRedistribuicao} role="status" aria-live="polite">
+      <strong>Distribuição entre lotes:</strong>
+      <ul className={styles.infoRedistribuicaoLista}>
+        {linhasComRedistribuicao.map((linha) => (
+          <li key={linha.itemId}>
+            {textoDistribuicao(linha)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function textoDistribuicao(linha: DistribuicaoItemRetorno): string {
+  // Extrai códigos dos lotes anteriores (alocações com loteId != null que
+  // não correspondem ao "quitado lote atual"). O service ordena alocações
+  // como [atual?, ...anteriores, excedente?], então pulamos a primeira
+  // alocação não-nula quando há quitação no atual.
+  const codigosAnteriores: string[] = [];
+  let pulouAtual = linha.quitadoLoteAtual === 0; // se atual=0, não há lote a pular
+  for (const a of linha.alocacoes) {
+    if (a.loteId == null) continue;
+    if (!pulouAtual) {
+      pulouAtual = true;
+      continue;
+    }
+    if (a.loteCodigo) codigosAnteriores.push(a.loteCodigo);
+  }
+
+  const partes: string[] = [];
+  partes.push(
+    `${linha.quantidadeRetornada} unidade(s) de ${linha.nomeItem} retornadas`,
+  );
+  if (linha.quitadoLoteAtual > 0) {
+    partes.push(`${linha.quitadoLoteAtual} quitaram este envio`);
+  }
+  if (linha.abatidoEmAnteriores > 0) {
+    partes.push(
+      codigosAnteriores.length > 0
+        ? `${linha.abatidoEmAnteriores} compensaram pendência anterior do(s) lote(s) ${codigosAnteriores.join(', ')}`
+        : `${linha.abatidoEmAnteriores} compensaram pendência anterior`,
+    );
+  }
+  if (linha.excedente > 0) {
+    partes.push(
+      `${linha.excedente} ficaram como excedente operacional não conciliado (auditável)`,
+    );
+  }
+  return partes.join(' · ') + '.';
 }

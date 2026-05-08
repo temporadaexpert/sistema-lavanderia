@@ -15,10 +15,13 @@ import {
   DivergenciaDetectadaError,
   type LinhaDivergencia,
   type LinhaDivergenciaDiariaDetectada,
+  type LinhaRetornoAnormal,
+  RetornoAnormalDetectadoError,
 } from '@/domain/errors/DomainErrors';
 import { ACAO_CONFIG, parseAcao } from './acoes';
 import type {
   ClassificacaoRetorno,
+  DistribuicaoItemRetorno,
   LinhaLoteInput,
 } from '@/application/services/LoteLavanderiaService';
 
@@ -36,7 +39,18 @@ function invalidarPaineis(): void {
 }
 
 export type AcaoResultado =
-  | { ok: true; mensagem?: string; loteId?: string; fechado?: boolean }
+  | {
+      ok: true;
+      mensagem?: string;
+      loteId?: string;
+      fechado?: boolean;
+      // Quebra do retorno por item (lote atual vs lotes anteriores vs
+      // excedente avulso). Presente apenas no resultado de
+      // registrarRetornoLoteAction quando há informação útil pra UI
+      // exibir num aviso informativo. Na maioria dos retornos sem
+      // redistribuição vem como undefined.
+      distribuicao?: readonly DistribuicaoItemRetorno[];
+    }
   // Caso especial: o retorno deixaria pendência mas o operador não
   // classificou. NÃO é falha fatal — é etapa operacional. UI deve abrir
   // o modal de classificação e re-submeter com `classificacao` preenchida.
@@ -57,6 +71,16 @@ export type AcaoResultado =
       divergencias: readonly LinhaDivergenciaDiariaDetectada[];
       totalFaltante: number;
       totalExcedente: number;
+    }
+  // Retorno proposto MUITO acima da pendência total — provável erro de
+  // digitação (ex.: 250 em vez de 25). UI deve abrir modal âmbar de
+  // confirmação e re-submeter com confirmacaoAnormalidade=true. Nada foi
+  // gravado.
+  | {
+      ok: false;
+      code: 'RETORNO_ANORMAL_DETECTADO';
+      error: string;
+      anomalias: readonly LinhaRetornoAnormal[];
     }
   | { ok: false; code: string; error: string };
 
@@ -280,6 +304,7 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
     const responsavelFechamentoRaw = formData.get('responsavelFechamento');
     const reconhecimentoRiscoRaw = formData.get('reconhecimentoRisco');
     const origemDivergenciaRaw = formData.get('origemDivergencia');
+    const confirmacaoAnormalidadeRaw = formData.get('confirmacaoAnormalidade');
 
     // Diagnóstico temporário em produção: aparece no painel Vercel
     // (Logs → Functions). Remove depois que confirmar que a action
@@ -343,12 +368,19 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
         reconhecimentoRiscoRaw === 'true' ||
         reconhecimentoRiscoRaw === '1',
       origemDivergencia,
+      confirmacaoAnormalidade:
+        confirmacaoAnormalidadeRaw === 'on' ||
+        confirmacaoAnormalidadeRaw === 'true' ||
+        confirmacaoAnormalidadeRaw === '1',
     });
 
     console.info('[registrarRetornoLoteAction] chamou registrarRetornoEFinalizar', {
       status: resultado.status,
       fechado: resultado.fechado,
       pendenciaResidual: resultado.pendenciaResidual,
+      qtdItensComRedistribuicao: resultado.distribuicao.filter(
+        (d) => d.abatidoEmAnteriores > 0 || d.excedente > 0,
+      ).length,
     });
     invalidarPaineis();
     const mensagem =
@@ -357,7 +389,12 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
         : resultado.status === 'registrado_parcial'
           ? 'Retorno parcial registrado — lote permanece aberto aguardando o restante.'
           : 'Retorno registrado e pendências atualizadas.';
-    return { ok: true, mensagem, fechado: resultado.fechado };
+    return {
+      ok: true,
+      mensagem,
+      fechado: resultado.fechado,
+      distribuicao: resultado.distribuicao,
+    };
   } catch (err) {
     // Caso especial: divergência detectada sem classificação. Não é
     // falha — UI deve oferecer modal de motivo e re-submeter.
@@ -386,6 +423,34 @@ export async function registrarRetornoLoteAction(formData: FormData): Promise<Ac
         code: 'DIVERGENCIA_DETECTADA',
         error: (err as Error).message,
         divergencias,
+      };
+    }
+    // Retorno anormalmente alto (provável erro de digitação). Mesma
+    // estratégia tolerante a boundary do divergência.
+    const ehAnormal =
+      err instanceof RetornoAnormalDetectadoError ||
+      (err !== null &&
+        typeof err === 'object' &&
+        'code' in err &&
+        (err as { code: unknown }).code === 'RETORNO_ANORMAL_DETECTADO' &&
+        'anomalias' in err &&
+        Array.isArray((err as { anomalias: unknown }).anomalias)) ||
+      (err instanceof Error && err.name === 'RetornoAnormalDetectadoError');
+    if (ehAnormal) {
+      const anomalias = (err as { anomalias: readonly LinhaRetornoAnormal[] })
+        .anomalias;
+      console.info('[registrarRetornoLoteAction] retornou RETORNO_ANORMAL_DETECTADO', {
+        qtdLinhas: anomalias.length,
+        totalExcedenteProjetado: anomalias.reduce(
+          (s, l) => s + l.excedenteProjetado,
+          0,
+        ),
+      });
+      return {
+        ok: false,
+        code: 'RETORNO_ANORMAL_DETECTADO',
+        error: (err as Error).message,
+        anomalias,
       };
     }
     console.info('[registrarRetornoLoteAction] erro', {
@@ -435,6 +500,56 @@ export async function encerrarLoteAction(formData: FormData): Promise<AcaoResult
     return { ok: true, mensagem: 'Lote encerrado. Ajuste de saldo registrado.' };
   } catch (err) {
     return toResultado(err, '[encerrarLoteAction]');
+  }
+}
+
+// Cancelamento de lote por DUPLICAÇÃO/erro grave de registro.
+// NÃO é encerramento com pendência — não cria ajustes nem conta como
+// perda. Cancela todas as movs do lote (envios e ajustes anteriores se
+// houver) e marca o header com motivo='duplicado'.
+//
+// UX: ação destrutiva, exigir confirmação no front.
+export async function cancelarLoteDuplicadoAction(
+  formData: FormData,
+): Promise<AcaoResultado> {
+  try {
+    const loteIdRaw = formData.get('loteId');
+    const motivoRaw = formData.get('motivo');
+    const responsavelRaw = formData.get('responsavel');
+
+    if (typeof loteIdRaw !== 'string' || !loteIdRaw) {
+      return { ok: false, code: 'VALIDATION_ERROR', error: 'Lote inválido' };
+    }
+    if (typeof motivoRaw !== 'string' || !motivoRaw.trim()) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        error: 'Descreva o motivo do cancelamento (ex.: "duplicação do L-002").',
+      };
+    }
+    if (typeof responsavelRaw !== 'string' || !responsavelRaw.trim()) {
+      return {
+        ok: false,
+        code: 'VALIDATION_ERROR',
+        error: 'Informe quem está autorizando o cancelamento.',
+      };
+    }
+
+    const container = await getContainer();
+    await container.loteLavanderia.cancelarLoteDuplicado({
+      loteId: LoteId(loteIdRaw),
+      motivo: motivoRaw,
+      responsavel: responsavelRaw,
+    });
+
+    invalidarPaineis();
+    return {
+      ok: true,
+      mensagem:
+        'Lote cancelado como duplicado. Todas as movimentações foram revertidas.',
+    };
+  } catch (err) {
+    return toResultado(err, '[cancelarLoteDuplicadoAction]');
   }
 }
 

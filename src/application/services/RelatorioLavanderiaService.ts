@@ -47,6 +47,15 @@ export interface ResumoLavanderia {
   // Ao menos uma movimentação do período não teve preço resolvível
   // (nem snapshot, nem valorUnitario atual).
   readonly custoParcial: boolean;
+  // Decomposição (NÃO duplica): porção de `totalRetornado` e
+  // `custoRetornado` que veio do canal "excedente operacional não
+  // conciliado" (retorno_lavanderia com conciliado=false). Permite o
+  // dashboard mostrar separadamente "retornado normal" vs "excedente
+  // não conciliado" sem alterar o agregado total. NÃO conta como perda
+  // (perdas vêm de ajuste vinculado a lote encerrado, ver
+  // RelatorioPerdaService).
+  readonly excedenteNaoConciliadoPecas: number;
+  readonly excedenteNaoConciliadoCusto: number;
 }
 
 export interface ResumoMensal {
@@ -208,6 +217,25 @@ export class RelatorioLavanderiaService {
       }
     }
 
+    // Decomposição do excedente não conciliado. Lemos uma 2ª vez filtrando
+    // só os retornos (o detalhePorItem já agregou tudo). Custo é com
+    // snapshot do mesmo modo dos outros agregadores, pra coerência.
+    const retornadasNaoConciliadas = await this.movimentacoes.listar({
+      tipo: 'retorno_lavanderia',
+      desdeDataHora: filtro.desde,
+      ateDataHora: filtro.ate,
+    });
+    const todosItens = await this.itens.listar();
+    const itensPorId = new Map(todosItens.map((i) => [i.id, i]));
+    let excedenteNaoConciliadoPecas = 0;
+    let excedenteNaoConciliadoCusto = 0;
+    for (const m of retornadasNaoConciliadas) {
+      if (m.conciliado) continue;
+      excedenteNaoConciliadoPecas += m.quantidade;
+      const preco = this.precoEfetivo(m, itensPorId);
+      if (preco != null) excedenteNaoConciliadoCusto += m.quantidade * preco;
+    }
+
     return {
       totalEnviado,
       totalRetornado,
@@ -217,6 +245,8 @@ export class RelatorioLavanderiaService {
       diferencaCusto: custoEnviado - custoRetornado,
       itensSemValorUnitario,
       custoParcial,
+      excedenteNaoConciliadoPecas,
+      excedenteNaoConciliadoCusto,
     };
   }
 

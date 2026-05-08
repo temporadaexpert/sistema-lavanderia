@@ -25,6 +25,15 @@ import type { MovimentacaoTipo } from '../types/enums';
 // preserva a trilha de auditoria. Consumidores de projeção (saldo,
 // relatórios, dashboard) ignoram canceladas por padrão (via filtro do
 // repositório); o histórico na UI mostra canceladas riscadas com o motivo.
+// `conciliado`: marca se a movimentação está pareada com um envio/registro
+// que a justifique. Default true — quase todas as movs são conciliadas
+// (entradas, saídas, retornos vinculados a lote, ajustes manuais
+// auditados). Recebe `false` apenas no canal "excedente operacional não
+// conciliado" do recebimento de lavanderia: quando o operador devolve
+// mais peças do que a soma das pendências abertas e o sistema não
+// consegue parear o excedente com nenhum envio rastreado. Permite que
+// admin filtre `WHERE conciliado=false` pra investigar sobras inexplicadas
+// sem precisar varrer texto livre de observação.
 export interface Movimentacao {
   readonly id: MovimentacaoId;
   readonly dataHora: string;
@@ -42,4 +51,5 @@ export interface Movimentacao {
   readonly canceladoEm: string | null;
   readonly canceladoPor: string | null;
   readonly motivoCancelamento: string | null;
+  readonly conciliado: boolean;
 }

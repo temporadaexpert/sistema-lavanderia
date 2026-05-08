@@ -6,6 +6,7 @@ import {
   EstoqueInsuficienteError,
   ValidationError,
   DivergenciaDetectadaError,
+  RetornoAnormalDetectadoError,
 } from '@/domain/errors/DomainErrors';
 import { LoteId } from '@/domain/types/ids';
 
@@ -954,17 +955,6 @@ describe('LoteLavanderiaService', () => {
       expect(detalhe!.lote.origemDivergencia).toBeNull();
     });
 
-    it('rejeita quantidade retornada maior que pendente (proteção anti-excesso)', async () => {
-      const lote = await criarLoteAberto();
-      await expect(
-        c.loteLavanderia.registrarRetornoEFinalizar({
-          loteId: lote.id,
-          responsavel: 'Bruno',
-          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 35 }], // só 30 pendentes
-        }),
-      ).rejects.toBeInstanceOf(ValidationError);
-    });
-
     it('lote já encerrado é rejeitado', async () => {
       const lote = await criarLoteAberto();
       await c.loteLavanderia.registrarRetornoEFinalizar({
@@ -994,6 +984,699 @@ describe('LoteLavanderiaService', () => {
           itens: [{ itemId: TEST_ITENS.toalha, quantidade: 1 }],
         }),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  // Cross-lote: o operador devolve mais peças do que a pendência atual e
+  // o sistema redistribui automaticamente — quita o lote escolhido, abate
+  // pendências anteriores do MESMO item (FIFO por dataEnvio) e o que sobra
+  // entra como retorno avulso (loteId=null). Antes do ajuste o sistema
+  // bloqueava a operação inteira, gerando trava operacional sempre que
+  // duas remessas tinham peças misturadas no retorno.
+  describe('redistribuição cross-lote no retorno', () => {
+    it('cenário 1: pendência=25 / retorno=25 — quita o lote, sem abater anterior nem excedente', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      expect(r.status).toBe('registrado_sem_pendencia');
+      expect(r.distribuicao).toHaveLength(1);
+      const linha = r.distribuicao[0]!;
+      expect(linha.quitadoLoteAtual).toBe(25);
+      expect(linha.abatidoEmAnteriores).toBe(0);
+      expect(linha.excedente).toBe(0);
+      // Apenas 1 mov de retorno gerada — vinculada ao lote escolhido
+      const movs = await c.movimentacoes.listar({
+        loteId: lote.id,
+        tipo: 'retorno_lavanderia',
+      });
+      expect(movs).toHaveLength(1);
+      expect(movs[0]!.quantidade).toBe(25);
+    });
+
+    it('cenário 2: pendência=25 / retorno=27 com lote anterior pendente=2 — quita atual + abate anterior', async () => {
+      // Avança o clock pra cobrir dataEnvio retroativa válida (limite 90d).
+      c.clock.set('2026-04-25T10:00:00.000Z');
+      // Lote anterior: 2 toalhas pendentes (envio 5, retorno 3)
+      const loteAnterior = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-20T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.registrarRetorno({
+        loteId: loteAnterior.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+      });
+
+      // Lote atual: 25 pendentes
+      const loteAtual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: loteAtual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      expect(r.status).toBe('registrado_sem_pendencia');
+      expect(r.fechado).toBe(false);
+      const linha = r.distribuicao[0]!;
+      expect(linha.quantidadeRetornada).toBe(27);
+      expect(linha.quitadoLoteAtual).toBe(25);
+      expect(linha.abatidoEmAnteriores).toBe(2);
+      expect(linha.excedente).toBe(0);
+
+      // Lote atual quitado integralmente
+      const detAtual = await c.loteLavanderia.detalhe(loteAtual.id);
+      expect(detAtual!.pendenciaEfetiva).toBe(0);
+      // Lote anterior também zerado
+      const detAnterior = await c.loteLavanderia.detalhe(loteAnterior.id);
+      expect(detAnterior!.pendenciaEfetiva).toBe(0);
+
+      // Duas movs: 25 vinculada ao atual + 2 vinculada ao anterior
+      const movsAtual = await c.movimentacoes.listar({
+        loteId: loteAtual.id,
+        tipo: 'retorno_lavanderia',
+      });
+      const movsAnterior = await c.movimentacoes.listar({
+        loteId: loteAnterior.id,
+        tipo: 'retorno_lavanderia',
+      });
+      expect(movsAtual.find((m) => m.quantidade === 25)).toBeDefined();
+      expect(movsAnterior.find((m) => m.quantidade === 2)).toBeDefined();
+    });
+
+    it('cenário 3: pendência=25 / retorno=27 sem anterior — registra excedente como retorno avulso (loteId=null)', async () => {
+      // Coloca 2 toalhas extras na lavanderia via ajuste manual (simula
+      // sobra física não vinculada a lote — caso real raro mas possível).
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 2,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+        observacao: 'sobra encontrada no chão da lavanderia',
+      });
+
+      const loteAtual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: loteAtual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      expect(r.status).toBe('registrado_sem_pendencia');
+      const linha = r.distribuicao[0]!;
+      expect(linha.quitadoLoteAtual).toBe(25);
+      expect(linha.abatidoEmAnteriores).toBe(0);
+      expect(linha.excedente).toBe(2);
+
+      // Excedente: mov de retorno SEM loteId
+      const movsAvulsas = (
+        await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' })
+      ).filter((m) => m.loteId == null);
+      expect(movsAvulsas).toHaveLength(1);
+      expect(movsAvulsas[0]!.quantidade).toBe(2);
+    });
+
+    it('cenário 4: pendência=25 / retorno=20 — mantém 5 pendentes (sem mudar comportamento de divergência)', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      // Sem classificação, divergência precisa ser sinalizada
+      let erroCapturado: unknown = null;
+      try {
+        await c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 20 }],
+        });
+      } catch (err) {
+        erroCapturado = err;
+      }
+      expect(erroCapturado).toBeInstanceOf(DivergenciaDetectadaError);
+      const e = erroCapturado as DivergenciaDetectadaError;
+      expect(e.divergencias).toHaveLength(1);
+      expect(e.divergencias[0]!.diferenca).toBe(5);
+
+      // Como classificação retorno_parcial, registra e mantém aberto
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 20 }],
+        classificacao: 'retorno_parcial',
+      });
+      expect(r.status).toBe('registrado_parcial');
+      expect(r.pendenciaResidual).toBe(5);
+      const linha = r.distribuicao[0]!;
+      expect(linha.quitadoLoteAtual).toBe(20);
+      expect(linha.abatidoEmAnteriores).toBe(0);
+      expect(linha.excedente).toBe(0);
+    });
+
+    it('cenário 5: retorno todo zero/vazio é bloqueado', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 10 }],
+      });
+
+      // Itens com qtd=0 (todos): rejeita
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 0 }],
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      // Quantidade negativa é ignorada — se a única linha for negativa,
+      // o total efetivo vira zero e a regra "≥ 1 unidade" rejeita.
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: -3 }],
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+
+      // Itens vazio também rejeita (mensagem diferente, mas mesmo tipo)
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [],
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('cenário 6: retorno alto não bloqueia — distribui via FIFO entre vários lotes anteriores', async () => {
+      c.clock.set('2026-04-26T10:00:00.000Z');
+      // 3 lotes na ordem de envio (mais antigo primeiro)
+      const loteA = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-10T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 10 }],
+      });
+      const loteB = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-15T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 8 }],
+      });
+      const loteAtual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+
+      // Devolução grande (23): quita atual=5, depois A=10, depois B=8 (FIFO)
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: loteAtual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 23 }],
+      });
+      expect(r.status).toBe('registrado_sem_pendencia');
+      const linha = r.distribuicao[0]!;
+      expect(linha.quitadoLoteAtual).toBe(5);
+      expect(linha.abatidoEmAnteriores).toBe(18); // 10 (A) + 8 (B)
+      expect(linha.excedente).toBe(0);
+
+      // FIFO: lote A (mais antigo) recebe 10, lote B recebe 8
+      const movsA = await c.movimentacoes.listar({
+        loteId: loteA.id,
+        tipo: 'retorno_lavanderia',
+      });
+      const movsB = await c.movimentacoes.listar({
+        loteId: loteB.id,
+        tipo: 'retorno_lavanderia',
+      });
+      expect(movsA.reduce((s, m) => s + m.quantidade, 0)).toBe(10);
+      expect(movsB.reduce((s, m) => s + m.quantidade, 0)).toBe(8);
+    });
+  });
+
+  // Endurecimento da redistribuição: anomalia, conciliação, financeiro,
+  // race em pendência anterior. Cada cenário aqui tem invariante específica
+  // que protege a verdade operacional.
+  describe('endurecimento (anomalia + excedente não conciliado + race)', () => {
+    it('cenário A: pendência total=25, retorno=27, sem anteriores → 25 quita, 2 ficam excedente NÃO CONCILIADO sem inflar perda', async () => {
+      // Sobra física que possibilita o retorno: 2 toalhas ajuste manual
+      // pra lavanderia (caso real raro mas legítimo).
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 2,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+      });
+
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      expect(r.distribuicao[0]!.quitadoLoteAtual).toBe(25);
+      expect(r.distribuicao[0]!.excedente).toBe(2);
+
+      // Mov não conciliada existe e é a única
+      const todasRet = await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' });
+      const naoConciliadas = todasRet.filter((m) => !m.conciliado);
+      expect(naoConciliadas).toHaveLength(1);
+      expect(naoConciliadas[0]!.quantidade).toBe(2);
+      expect(naoConciliadas[0]!.loteId).toBeNull();
+
+      // Não vira perda: o lote não foi encerrado, não há ajuste com
+      // motivo de perda. RelatorioPerda agrega zero.
+      const perda = await c.relatorioPerda.resumo();
+      expect(perda.totalPecas).toBe(0);
+      expect(perda.lotesEncerrados).toBe(0);
+    });
+
+    it('cenário B: pendência atual=25 + anteriores=2 + retorno=27 → 25 quita atual, 2 quitam anterior, ZERO excedente', async () => {
+      c.clock.set('2026-04-25T10:00:00.000Z');
+      // Anterior: 2 pendentes
+      const ant = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-20T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.registrarRetorno({
+        loteId: ant.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+      });
+      const atual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: atual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+      expect(r.distribuicao[0]!.quitadoLoteAtual).toBe(25);
+      expect(r.distribuicao[0]!.abatidoEmAnteriores).toBe(2);
+      expect(r.distribuicao[0]!.excedente).toBe(0);
+
+      // Nenhuma mov não conciliada é gerada nesse cenário.
+      const todasRet = await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' });
+      expect(todasRet.filter((m) => !m.conciliado)).toHaveLength(0);
+    });
+
+    it('cenário C: pendência total=25, retorno=250 → bloqueio com RetornoAnormalDetectadoError, NADA gravado', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      let erro: unknown = null;
+      try {
+        await c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 250 }],
+        });
+      } catch (e) {
+        erro = e;
+      }
+      expect(erro).toBeInstanceOf(RetornoAnormalDetectadoError);
+      const an = erro as RetornoAnormalDetectadoError;
+      expect(an.code).toBe('RETORNO_ANORMAL_DETECTADO');
+      expect(an.anomalias[0]!.proposto).toBe(250);
+      expect(an.anomalias[0]!.pendenciaTotal).toBe(25);
+      // limite = 25 + max(10, 25*0.3) = 25 + max(10, 7.5) = 35
+      expect(an.anomalias[0]!.limiteAceitavel).toBe(35);
+
+      // Nada gravado — pré-validação atomicidade
+      const movs = await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' });
+      expect(movs).toHaveLength(0);
+    });
+
+    it('cenário C-bis: regra absoluta protege escala pequena (pendência=2, retorno=4 NÃO dispara, =13 dispara)', async () => {
+      // pendência 2 → limite = 2 + max(10, 0) = 12
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 2 }],
+      });
+      // 4 está dentro do limite (12) — não dispara anomalia
+      await expect(
+        c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          // saldo lavanderia só tem 2; com 4 vai falhar saldo, mas não anomalia
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 4 }],
+        }),
+      ).rejects.toBeInstanceOf(EstoqueInsuficienteError);
+
+      // 13 ultrapassa o limite 12 → dispara anomalia ANTES da validação de saldo
+      let erro: unknown = null;
+      try {
+        await c.loteLavanderia.registrarRetornoEFinalizar({
+          loteId: lote.id,
+          responsavel: 'Bruno',
+          itens: [{ itemId: TEST_ITENS.toalha, quantidade: 13 }],
+        });
+      } catch (e) {
+        erro = e;
+      }
+      expect(erro).toBeInstanceOf(RetornoAnormalDetectadoError);
+    });
+
+    it('cenário C-confirmacao: confirmacaoAnormalidade=true permite seguir e gera excedente não conciliado', async () => {
+      // Coloca 25 toalhas extras direto na lavanderia (cenário em que
+      // realmente há sobra física pra justificar o retorno alto)
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 60,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+      });
+
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 80 }],
+        confirmacaoAnormalidade: true,
+      });
+      expect(r.distribuicao[0]!.quitadoLoteAtual).toBe(25);
+      expect(r.distribuicao[0]!.excedente).toBe(55);
+      const naoConc = (await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' }))
+        .filter((m) => !m.conciliado);
+      expect(naoConc.reduce((s, m) => s + m.quantidade, 0)).toBe(55);
+    });
+
+    it('cenário D (race): re-leitura da pendência anterior entre pré-cálculo e gravação não deixa pendência negativa', async () => {
+      c.clock.set('2026-04-25T10:00:00.000Z');
+
+      // Sobra física suficiente pra suportar o cenário inteiro (envio
+      // de 30 + retornos de 32). Sem isso o saldo lavanderia barra antes
+      // de testarmos a lógica de race protection.
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 5,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+      });
+
+      // Anterior: pendência 2 (5 envio - 3 retorno)
+      const ant = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-20T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.registrarRetorno({
+        loteId: ant.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+      });
+
+      const atual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      // "Op concorrente" zera a pendência do anterior. No mundo real
+      // isso aconteceria entre o pré-cálculo e a escrita do operador
+      // principal — aqui rodamos antes pra forçar pendência=0 quando o
+      // service for re-ler. O ant ainda fica visível como `concluido`
+      // (envio==retorno==5), portanto fora da lista `apenasAbertos`.
+      await c.loteLavanderia.registrarRetorno({
+        loteId: ant.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 2 }],
+      });
+
+      // Operador tenta 27 contra atual: pré-cálculo NÃO inclui ant (já
+      // não está em "abertos"), distribui 25 atual + 2 excedente. A
+      // re-leitura do write-loop não chega a alterar nada porque não
+      // havia alocação anterior — mas a invariante crítica é a mesma:
+      // o anterior NÃO recebe baixa duplicada e fica com pendência 0.
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: atual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      expect(r.distribuicao[0]!.quitadoLoteAtual).toBe(25);
+      expect(r.distribuicao[0]!.abatidoEmAnteriores).toBe(0);
+      expect(r.distribuicao[0]!.excedente).toBe(2);
+
+      const detAnt = await c.loteLavanderia.detalhe(ant.id);
+      // CRÍTICO: pendência permanece 0 (não vai pra negativo). Soma de
+      // retornos (3+2) bate exatamente com envio (5). Race protegido.
+      expect(detAnt!.pendenciaEfetiva).toBe(0);
+      expect(detAnt!.totalEnviado).toBe(5);
+      expect(detAnt!.totalRetornado).toBe(5);
+
+      // Excedente vira mov não conciliada
+      const movsExc = (
+        await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' })
+      ).filter((m) => !m.conciliado);
+      expect(movsExc.reduce((s, m) => s + m.quantidade, 0)).toBe(2);
+    });
+
+    it('cenário D-bis (re-leitura ativa): pendência anterior cai entre planejamento e gravação → sobra vai pra excedente, anterior não fica negativo', async () => {
+      c.clock.set('2026-04-25T10:00:00.000Z');
+
+      // Sobra física pra suportar todas as movs do cenário
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 5,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+      });
+
+      const ant = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-20T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      // Pendência inicial = 5 (lote ainda aberto, sem retornos)
+      const atual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      // Spy em `detalhe`: na 1ª leitura do anterior (pré-cálculo) devolve
+      // pendência 5; nas próximas (re-leitura no write loop) devolve 0.
+      // Simula a race window real entre pre-check e write.
+      const detalheOriginal = c.loteLavanderia.detalhe.bind(c.loteLavanderia);
+      let chamadasAnt = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (c.loteLavanderia as any).detalhe = async (loteId: string) => {
+        const real = await detalheOriginal(loteId as never);
+        if (loteId === ant.id) {
+          chamadasAnt++;
+          if (chamadasAnt > 2 && real) {
+            // Após o pré-cálculo (somar pendência + planejar) já consumiu
+            // 2 leituras do anterior — a partir da 3ª, simulamos pendência
+            // zerada por op concorrente.
+            return {
+              ...real,
+              itens: real.itens.map((i) => ({
+                ...i,
+                pendencia: 0,
+                pendenciaEfetiva: 0,
+              })),
+              pendenciaEfetiva: 0,
+              pendenciaTotal: 0,
+            };
+          }
+        }
+        return real;
+      };
+
+      const r = await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: atual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      // Pré-cálculo dizia: 25 atual + 2 anterior. Re-leitura corrigiu:
+      // 25 atual + 0 anterior + 2 excedente. Mov anterior NÃO foi gravada.
+      expect(r.distribuicao[0]!.quitadoLoteAtual).toBe(25);
+      expect(r.distribuicao[0]!.abatidoEmAnteriores).toBe(0);
+      expect(r.distribuicao[0]!.excedente).toBe(2);
+
+      // Movs físicas no anterior somam 0 — re-read evitou baixa
+      const movsAnt = await c.movimentacoes.listar({
+        loteId: ant.id,
+        tipo: 'retorno_lavanderia',
+      });
+      expect(movsAnt).toHaveLength(0);
+
+      // Excedente registrado como não conciliado
+      const movsExc = (
+        await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' })
+      ).filter((m) => !m.conciliado);
+      expect(movsExc.reduce((s, m) => s + m.quantidade, 0)).toBe(2);
+    });
+
+    it('cenário E (financeiro): redistribuição cross-lote NÃO duplica envio nem cobrança no impostômetro', async () => {
+      c.clock.set('2026-04-25T10:00:00.000Z');
+      // Lote anterior pendente
+      const ant = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-20T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.registrarRetorno({
+        loteId: ant.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 3 }],
+      });
+      const atual = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        dataEnvio: '2026-04-25T12:00:00.000Z',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+
+      const resumoAntes = await c.relatorioLavanderia.resumo();
+      expect(resumoAntes.totalEnviado).toBe(30); // 5 + 25
+      // toalha = R$30 → 30 × 30 = 900
+      expect(resumoAntes.custoEnviado).toBe(30 * 30);
+
+      // Retorno cross-lote: 25 quita atual, 2 quita anterior
+      await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: atual.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 27 }],
+      });
+
+      const resumoDepois = await c.relatorioLavanderia.resumo();
+      // Total enviado NÃO cresceu — redistribuição não cria envio
+      expect(resumoDepois.totalEnviado).toBe(30);
+      expect(resumoDepois.custoEnviado).toBe(30 * 30);
+      // Total retornado cresceu por 27 (3 prévios + 27 novos = 30)
+      expect(resumoDepois.totalRetornado).toBe(30);
+      // Excedente não conciliado: zero (cenário B sem excedente)
+      expect(resumoDepois.excedenteNaoConciliadoPecas).toBe(0);
+    });
+
+    it('cenário F: excedente não conciliado é AUDITÁVEL (filtro `conciliado=false`) e NÃO conta como perda', async () => {
+      // Sobra física pra permitir o excedente
+      await c.movimentacaoService.registrar({
+        itemId: TEST_ITENS.toalha,
+        quantidade: 3,
+        tipo: 'ajuste',
+        origemId: null,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Gestor',
+      });
+
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Ana',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 25 }],
+      });
+      await c.loteLavanderia.registrarRetornoEFinalizar({
+        loteId: lote.id,
+        responsavel: 'Bruno',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 28 }],
+      });
+
+      // Filtro auditoria: lista movs não conciliadas
+      const todas = await c.movimentacoes.listar({ tipo: 'retorno_lavanderia' });
+      const naoConc = todas.filter((m) => !m.conciliado);
+      expect(naoConc).toHaveLength(1);
+      expect(naoConc[0]!.quantidade).toBe(3);
+      expect(naoConc[0]!.loteId).toBeNull();
+      // Rastreabilidade: observação contém marcador "não conciliado"
+      expect(naoConc[0]!.observacao).toContain('excedente operacional não conciliado');
+
+      // Decomposição no resumo: aparece como linha separada SEM duplicar
+      const resumo = await c.relatorioLavanderia.resumo();
+      expect(resumo.excedenteNaoConciliadoPecas).toBe(3);
+      // Soma total continua coerente (3 não conciliadas estão DENTRO de
+      // totalRetornado=28, não somadas duas vezes)
+      expect(resumo.totalRetornado).toBe(28);
+
+      // Não conta como perda
+      const perda = await c.relatorioPerda.resumo();
+      expect(perda.totalPecas).toBe(0);
+      expect(perda.lotesEncerrados).toBe(0);
     });
   });
 
@@ -1140,6 +1823,173 @@ describe('LoteLavanderiaService', () => {
       expect(movs[0]?.dataHora).toBe(isoMeioDia(ymdRetro));
       // E `registradoEm` (campo de auditoria da movimentação) reflete o clock.
       expect(movs[0]?.registradoEm).toBe(c.clock.agoraISO());
+    });
+  });
+
+  describe('cancelarLoteDuplicado (correção de duplicidade vs falsa perda)', () => {
+    it('lote aberto: cancela todas envio_lavanderia → "Peças hoje" zera para o duplicado', async () => {
+      // Reproduz o cenário do bug em escala compatível com o estoque
+      // seed do teste (100 toalhas): 40 originais + 38 duplicado = 78.
+      // O comportamento exibido é o mesmo do caso real (90 + 88 → 178).
+      await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 40 }],
+      });
+      const dup = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 38 }],
+      });
+
+      const totalAntes = (
+        await c.movimentacoes.listar({ tipo: 'envio_lavanderia' })
+      ).reduce((s, m) => s + m.quantidade, 0);
+      expect(totalAntes).toBe(78);
+
+      await c.loteLavanderia.cancelarLoteDuplicado({
+        loteId: dup.id,
+        motivo: 'Duplo clique no envio',
+        responsavel: 'Gestor',
+      });
+
+      // Default exclui canceladas → soma volta a 40 (apenas o lote real).
+      const totalDepois = (
+        await c.movimentacoes.listar({ tipo: 'envio_lavanderia' })
+      ).reduce((s, m) => s + m.quantidade, 0);
+      expect(totalDepois).toBe(40);
+
+      const detalhe = await c.loteLavanderia.detalhe(dup.id);
+      expect(detalhe!.lote.motivoFechamento).toBe('duplicado');
+      expect(detalhe!.lote.encerradoPor).toBe('Gestor');
+      expect(detalhe!.lote.motivoDescricao).toBe('Duplo clique no envio');
+    });
+
+    it('lote já encerrado como perda: REVERTE ajustes prévios + remove de "Perdas"', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 50 }],
+      });
+      // Encerrou como erro_operacional → caiu nas Perdas (50 peças)
+      await c.loteLavanderia.encerrarComPendencia({
+        loteId: lote.id,
+        motivo: 'erro_operacional',
+        motivoDescricao: 'achei q era perda — descobri q era duplicado',
+        responsavel: 'Gestor',
+        reconhecimentoRisco: true,
+      });
+      const perdasAntes = await c.relatorioPerda.resumo();
+      expect(perdasAntes.totalPecas).toBe(50);
+
+      // Cancela como duplicado — deve REVERTER tudo
+      await c.loteLavanderia.cancelarLoteDuplicado({
+        loteId: lote.id,
+        motivo: 'Era duplicação do L-001',
+        responsavel: 'Gestor',
+      });
+
+      // Sai das perdas
+      const perdasDepois = await c.relatorioPerda.resumo();
+      expect(perdasDepois.totalPecas).toBe(0);
+
+      // Movs ativas zeradas (envios + ajustes todos cancelados)
+      const ativas = await c.movimentacoes.listar({ loteId: lote.id });
+      expect(ativas).toHaveLength(0);
+
+      // Trilha de auditoria preservada — movs canceladas existem no log
+      const todas = await c.movimentacoes.listar({
+        loteId: lote.id,
+        incluirCanceladas: true,
+      });
+      expect(todas.length).toBeGreaterThan(0);
+      expect(todas.every((m) => m.cancelada)).toBe(true);
+
+      // Header reflete a nova classificação
+      const detalhe = await c.loteLavanderia.detalhe(lote.id);
+      expect(detalhe!.lote.motivoFechamento).toBe('duplicado');
+    });
+
+    it('idempotente: re-executar em lote já cancelado é no-op', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await c.loteLavanderia.cancelarLoteDuplicado({
+        loteId: lote.id,
+        motivo: 'primeira chamada',
+        responsavel: 'Gestor',
+      });
+      const motivo1 = (await c.loteLavanderia.detalhe(lote.id))!.lote.motivoDescricao;
+
+      await c.loteLavanderia.cancelarLoteDuplicado({
+        loteId: lote.id,
+        motivo: 'segunda chamada — deve ser ignorada',
+        responsavel: 'Outro',
+      });
+      const motivo2 = (await c.loteLavanderia.detalhe(lote.id))!.lote.motivoDescricao;
+      expect(motivo2).toBe(motivo1);
+    });
+
+    it('valida motivo obrigatório', async () => {
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 5 }],
+      });
+      await expect(
+        c.loteLavanderia.cancelarLoteDuplicado({
+          loteId: lote.id,
+          motivo: '   ',
+          responsavel: 'Gestor',
+        }),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+
+    it('valida lote inexistente', async () => {
+      await expect(
+        c.loteLavanderia.cancelarLoteDuplicado({
+          loteId: LoteId('lote-fantasma'),
+          motivo: 'qualquer',
+          responsavel: 'Gestor',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it('saldo do depósito volta ao estado original (envios cancelados)', async () => {
+      const saldoAntes = await c.saldoService.saldoDe(
+        TEST_ITENS.toalha,
+        TEST_LOCAIS.deposito,
+      );
+      const lote = await c.loteLavanderia.criarEnvio({
+        origemId: TEST_LOCAIS.deposito,
+        destinoId: TEST_LOCAIS.lavanderia,
+        responsavel: 'Op',
+        itens: [{ itemId: TEST_ITENS.toalha, quantidade: 30 }],
+      });
+      const saldoMeio = await c.saldoService.saldoDe(
+        TEST_ITENS.toalha,
+        TEST_LOCAIS.deposito,
+      );
+      expect(saldoMeio).toBe(saldoAntes - 30);
+
+      await c.loteLavanderia.cancelarLoteDuplicado({
+        loteId: lote.id,
+        motivo: 'duplicação',
+        responsavel: 'Gestor',
+      });
+
+      const saldoFinal = await c.saldoService.saldoDe(
+        TEST_ITENS.toalha,
+        TEST_LOCAIS.deposito,
+      );
+      expect(saldoFinal).toBe(saldoAntes);
     });
   });
 });
