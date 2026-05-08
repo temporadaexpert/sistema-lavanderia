@@ -32,6 +32,10 @@ interface MovimentacaoRow {
   // antigo, leituras durante deploy parcial) podem chegar sem ela. O cast
   // pra Movimentacao trata como `true` (default do schema).
   readonly conciliado?: boolean | null;
+  // Adicionada na 0006. Nullable: rows antigas e mov de evento isolado
+  // (cancelar mov livre, etc.) ficam null e são tratadas como "operação
+  // de uma mov só" pela UI de correções.
+  readonly operacao_id?: string | null;
 }
 
 const TABELA = 'movimentacoes';
@@ -65,6 +69,7 @@ function rowToMovimentacao(row: MovimentacaoRow): Movimentacao {
     // Linhas anteriores à migration 0005 não têm a coluna; o cast pega
     // como undefined → tratamos como conciliada (default do schema novo).
     conciliado: (row.conciliado ?? true) as boolean,
+    operacaoId: row.operacao_id ?? null,
   };
 }
 
@@ -87,6 +92,7 @@ function movimentacaoToRow(m: Movimentacao): MovimentacaoRow {
     cancelado_por: m.canceladoPor,
     motivo_cancelamento: m.motivoCancelamento,
     conciliado: m.conciliado,
+    operacao_id: m.operacaoId,
   };
 }
 
@@ -137,6 +143,7 @@ export class SupabaseMovimentacaoRepository implements MovimentacaoRepository {
     if (filtro?.itemId) query = query.eq('item_id', filtro.itemId);
     if (filtro?.tipo) query = query.eq('tipo', filtro.tipo);
     if (filtro?.loteId) query = query.eq('lote_id', filtro.loteId);
+    if (filtro?.operacaoId) query = query.eq('operacao_id', filtro.operacaoId);
 
     // localId casa origem OR destino — sintaxe `.or()` do PostgREST gera
     // `(origem_id.eq.X OR destino_id.eq.X)` na cláusula WHERE, combinado

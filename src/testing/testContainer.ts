@@ -21,6 +21,8 @@ import { InMemoryControleDiarioRepository } from '@/infrastructure/repositories/
 import { ResetOperacionalService } from '@/application/services/ResetOperacionalService';
 import { CategoryService } from '@/application/services/CategoryService';
 import { InMemoryCategoryRepository } from '@/infrastructure/repositories/InMemoryCategoryRepository';
+import { CorrecaoAdminService } from '@/application/services/CorrecaoAdminService';
+import { InMemoryCorrecaoAdminRepository } from '@/infrastructure/repositories/InMemoryCorrecaoAdminRepository';
 
 // Clock controlável — permite testar cenários que dependem de data sem
 // usar timers reais. set() move o tempo para qualquer ponto; tests de
@@ -101,6 +103,17 @@ export function criarContainerDeTeste(
     idGen,
     clock,
   );
+  const correcoes = new InMemoryCorrecaoAdminRepository();
+  const correcaoAdmin = new CorrecaoAdminService(
+    correcoes,
+    movimentacoes,
+    lotes,
+    itens,
+    movimentacaoService,
+    loteLavanderia,
+    idGen,
+    clock,
+  );
   const resetOperacional = new ResetOperacionalService(
     movimentacoes,
     lotes,
@@ -132,6 +145,8 @@ export function criarContainerDeTeste(
     resetOperacional,
     categorias,
     categoryService,
+    correcoes,
+    correcaoAdmin,
   };
 }
 

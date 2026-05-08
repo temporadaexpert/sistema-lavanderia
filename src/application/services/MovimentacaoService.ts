@@ -88,9 +88,19 @@ export class MovimentacaoService {
     // (capturaSnapshotPreco) — tipos sem impacto financeiro ficam null.
     // Quando o item não tem preço cadastrado no momento do registro, o
     // snapshot também fica null e os relatórios tratam transparente.
-    const precoUnitarioSnapshot = regra.capturaSnapshotPreco
-      ? (item.valorUnitario ?? null)
-      : null;
+    //
+    // Override (precoUnitarioSnapshotOverride): caminho EXCLUSIVO da
+    // correção administrativa. Ao re-registrar uma mov pra substituir
+    // uma cancelada, herdamos o snapshot da original — não capturamos
+    // o preço atual. Sem isso, uma correção feita meses depois mudaria
+    // retroativamente o custo histórico do envio. `undefined` = usa
+    // captura normal; `null` ou `number` = usa exatamente esse valor.
+    const precoUnitarioSnapshot =
+      input.precoUnitarioSnapshotOverride !== undefined
+        ? input.precoUnitarioSnapshotOverride
+        : regra.capturaSnapshotPreco
+          ? (item.valorUnitario ?? null)
+          : null;
 
     const mov: Movimentacao = {
       id: MovimentacaoId(this.idGen.gerar()),
@@ -110,6 +120,7 @@ export class MovimentacaoService {
       canceladoPor: null,
       motivoCancelamento: null,
       conciliado: input.conciliado ?? true,
+      operacaoId: input.operacaoId ?? null,
     };
 
     await this.movimentacoes.registrar(mov);

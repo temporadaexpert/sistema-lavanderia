@@ -27,6 +27,7 @@ export class InMemoryMovimentacaoRepository implements MovimentacaoRepository {
       if (filtro.ateDataHora && m.dataHora > filtro.ateDataHora) return false;
       if (filtro.desdeDataHora && m.dataHora < filtro.desdeDataHora) return false;
       if (filtro.loteId && m.loteId !== filtro.loteId) return false;
+      if (filtro.operacaoId && m.operacaoId !== filtro.operacaoId) return false;
       return true;
     });
   }

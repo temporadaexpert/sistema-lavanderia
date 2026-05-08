@@ -11,6 +11,10 @@ import { ContatoLavanderiaService } from '@/application/services/ContatoLavander
 import { ControleDiarioService } from '@/application/services/ControleDiarioService';
 import { ResetOperacionalService } from '@/application/services/ResetOperacionalService';
 import { CategoryService } from '@/application/services/CategoryService';
+import { CorrecaoAdminService } from '@/application/services/CorrecaoAdminService';
+import { JsonFileCorrecaoAdminRepository } from './repositories/JsonFileCorrecaoAdminRepository';
+import { SupabaseCorrecaoAdminRepository } from './repositories/SupabaseCorrecaoAdminRepository';
+import type { CorrecaoAdminRepository } from '@/application/ports/CorrecaoAdminRepository';
 import { JsonFileItemRepository } from './repositories/JsonFileItemRepository';
 import { JsonFileLocalRepository } from './repositories/JsonFileLocalRepository';
 import { JsonFileMovimentacaoRepository } from './repositories/JsonFileMovimentacaoRepository';
@@ -84,6 +88,13 @@ function criarRepoControleDiario(): ControleDiarioRepository {
   return new JsonFileControleDiarioRepository();
 }
 
+function criarRepoCorrecaoAdmin(): CorrecaoAdminRepository {
+  if (PERSISTENCE_DRIVER === 'supabase') {
+    return new SupabaseCorrecaoAdminRepository(getSupabaseClient());
+  }
+  return new JsonFileCorrecaoAdminRepository();
+}
+
 function criarRepoContatoLavanderia(): ContatoLavanderiaRepository {
   if (PERSISTENCE_DRIVER === 'supabase') {
     return new SupabaseContatoLavanderiaRepository(getSupabaseClient());
@@ -132,6 +143,8 @@ export interface Container {
   controleDiario: ControleDiarioService;
   resetOperacional: ResetOperacionalService;
   categoryService: CategoryService;
+  correcoes: CorrecaoAdminRepository;
+  correcaoAdmin: CorrecaoAdminService;
 }
 
 // Composition root: instancia adapters concretos e injeta nos serviços.
@@ -194,6 +207,17 @@ export function criarContainer(): Container {
     locais,
   );
   const categoryService = new CategoryService(categorias, idGen, clock);
+  const correcoes = criarRepoCorrecaoAdmin();
+  const correcaoAdmin = new CorrecaoAdminService(
+    correcoes,
+    movimentacoes,
+    lotes,
+    itens,
+    movimentacaoService,
+    loteLavanderia,
+    idGen,
+    clock,
+  );
   return {
     itens,
     locais,
@@ -224,5 +248,7 @@ export function criarContainer(): Container {
     controleDiario,
     resetOperacional,
     categoryService,
+    correcoes,
+    correcaoAdmin,
   };
 }

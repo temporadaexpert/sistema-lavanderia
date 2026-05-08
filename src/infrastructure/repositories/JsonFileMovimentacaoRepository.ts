@@ -46,6 +46,8 @@ export class JsonFileMovimentacaoRepository implements MovimentacaoRepository {
               (m as { precoUnitarioSnapshot?: number | null }).precoUnitarioSnapshot ??
               null,
             conciliado: (m as { conciliado?: boolean }).conciliado ?? true,
+            operacaoId:
+              (m as { operacaoId?: string | null }).operacaoId ?? null,
           }) as Movimentacao,
       );
     })();
@@ -86,6 +88,7 @@ export class JsonFileMovimentacaoRepository implements MovimentacaoRepository {
       if (filtro.ateDataHora && m.dataHora > filtro.ateDataHora) return false;
       if (filtro.desdeDataHora && m.dataHora < filtro.desdeDataHora) return false;
       if (filtro.loteId && m.loteId !== filtro.loteId) return false;
+      if (filtro.operacaoId && m.operacaoId !== filtro.operacaoId) return false;
       return true;
     });
   }

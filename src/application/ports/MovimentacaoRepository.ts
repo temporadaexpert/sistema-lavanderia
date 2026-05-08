@@ -13,6 +13,10 @@ export interface MovimentacaoFiltro {
   // de projeção (saldo, relatórios, dashboard) sem mudar cada chamador.
   // Histórico da UI passa `true` para mostrar canceladas riscadas.
   readonly incluirCanceladas?: boolean;
+  // Filtra todas as movs registradas pela MESMA operação de UI. Usado
+  // pela camada de correção administrativa pra cancelar/re-executar uma
+  // operação inteira como unidade.
+  readonly operacaoId?: string;
 }
 
 // Patch aplicado ao marcar uma movimentação como cancelada. NUNCA altera

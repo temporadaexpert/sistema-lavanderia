@@ -63,6 +63,7 @@ function novaMovimentacao(
     canceladoPor: null,
     motivoCancelamento: null,
     conciliado: true,
+    operacaoId: null,
     ...overrides,
   };
 }

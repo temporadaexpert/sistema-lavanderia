@@ -52,4 +52,10 @@ export interface Movimentacao {
   readonly canceladoPor: string | null;
   readonly motivoCancelamento: string | null;
   readonly conciliado: boolean;
+  // Correlaciona movs criadas pela MESMA operação de UI (1 envio de lote
+  // gera N movs com mesmo operacaoId; 1 recebimento de lote pode gerar
+  // M movs cross-lote + excedente, todas com mesmo operacaoId). Permite
+  // que CorrecaoAdminService cancele/re-execute uma operação inteira
+  // como unidade. Movs anteriores à migration 0006 ficam com null.
+  readonly operacaoId: string | null;
 }

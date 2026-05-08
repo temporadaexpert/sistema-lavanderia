@@ -40,6 +40,10 @@ export interface CriarLoteEnvioInput {
   readonly observacao?: string | null;
   readonly dataEnvio?: string;
   readonly itens: readonly LinhaLoteInput[];
+  // Quando passado, todas as movs do lote compartilham este id (caminho
+  // de re-execução pela CorrecaoAdminService — preserva a "identidade
+  // operacional" da remessa). Quando ausente, o service gera um novo id.
+  readonly operacaoId?: string;
 }
 
 export interface RegistrarRetornoLoteInput {
@@ -48,6 +52,9 @@ export interface RegistrarRetornoLoteInput {
   readonly observacao?: string | null;
   readonly dataRetorno?: string;
   readonly itens: readonly LinhaLoteInput[];
+  // Mesma semântica do CriarLoteEnvioInput.operacaoId — caminho de
+  // re-execução administrativa.
+  readonly operacaoId?: string;
 }
 
 // Classificação operacional do retorno quando há divergência. Só 5 das 6
@@ -297,6 +304,11 @@ export class LoteLavanderiaService {
     };
     await this.lotes.criar(lote);
 
+    // Correlação de operação: 1 envio de lote = 1 operacao_id, todas as
+    // N movs envio_lavanderia do lote o compartilham. Caller (correção
+    // admin) pode reutilizar um id existente na re-execução.
+    const operacaoId = input.operacaoId ?? this.idGen.gerar();
+
     for (const linha of input.itens) {
       await this.movService.registrar({
         itemId: linha.itemId,
@@ -308,6 +320,7 @@ export class LoteLavanderiaService {
         dataHora: dataEnvio,
         loteId: id,
         observacao: linha.observacao ?? null,
+        operacaoId,
       });
     }
 
@@ -627,6 +640,11 @@ export class LoteLavanderiaService {
       }
     }
 
+    // Correlação de operação: 1 recebimento de lote = 1 operacao_id,
+    // todas as N movs do fan-out (atual + anteriores + excedente)
+    // compartilham. Caller (correção admin) pode reutilizar id existente.
+    const operacaoId = input.operacaoId ?? this.idGen.gerar();
+
     // Caminho 1: grava as movs conforme a distribuição calculada. Cada
     // alocação vira um retorno_lavanderia separado, com loteId apontando
     // pro lote-destino contábil (ou null pra excedente avulso). O
@@ -694,6 +712,7 @@ export class LoteLavanderiaService {
             observacao: obs,
             // Apenas o canal excedente (loteId=null) é não conciliado.
             conciliado: loteAlvo != null,
+            operacaoId,
           });
         }
       }
@@ -715,6 +734,7 @@ export class LoteLavanderiaService {
           loteId: null,
           observacao: obs,
           conciliado: false,
+          operacaoId,
         });
       }
 

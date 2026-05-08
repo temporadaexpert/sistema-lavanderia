@@ -21,6 +21,7 @@ const GESTAO: readonly ItemNav[] = [
   { href: '/admin/divergencias-diarias', label: 'Divergências (diárias)' },
   { href: '/admin/lavanderia', label: 'Custos' },
   { href: '/admin/perdas', label: 'Perdas' },
+  { href: '/admin/correcoes', label: 'Correções' },
   { href: '/admin/configuracoes', label: 'Configurações' },
 ];
 
