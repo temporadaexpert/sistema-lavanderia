@@ -17,6 +17,7 @@ import {
 import type {
   AlertaEstoqueBaixo,
   AlertaLotePendente,
+  DashboardSnapshot,
   UltimoLancamento,
 } from '@/application/services/DashboardAdminService';
 import type {
@@ -24,8 +25,46 @@ import type {
   ResumoDivergencias,
 } from '@/application/services/DivergenciaService';
 import type { MovimentacaoTipo } from '@/domain/types/enums';
-import { comLog } from '@/app/_lib/serverLog';
+import { comLogSafe } from '@/app/_lib/serverLog';
+import { AvisoFalhaParcial } from '@/app/_components/AvisoFalhaParcial';
 import styles from './page.module.css';
+
+// Fallback do snapshot quando o loader falha. Mantém shape compatível
+// com o resto da renderização — zeros nos números, vazios nos arrays.
+const SNAPSHOT_VAZIO: DashboardSnapshot = {
+  agora: new Date().toISOString(),
+  inicioDia: new Date().toISOString(),
+  inicioMes: new Date().toISOString(),
+  depositoPrincipalNome: null,
+  lavanderia: {
+    valorHoje: 0,
+    valorMes: 0,
+    pecasHoje: 0,
+    pecasMes: 0,
+    custoParcialHoje: false,
+    custoParcialMes: false,
+  },
+  perdas: { pecasMes: 0, valorMes: 0, lotesEncerradosMes: 0, custoParcial: false },
+  pendencia: { totalLotes: 0, pecasPendentes: 0 },
+  materiais: { total: 0, ativos: 0 },
+  locais: { total: 0, ativos: 0 },
+  alertasEstoque: [],
+  alertasLotes: [],
+  ultimasMovimentacoes: [],
+};
+
+const RESUMO_DIV_VAZIO: ResumoDivergencias = {
+  criticas: 0,
+  atencao: 0,
+  aguardando: 0,
+  excesso: 0,
+  encerradosBaixados: 0,
+  valorPendenteTotal: 0,
+  pendenciaTotalPecas: 0,
+  custoParcial: false,
+  maiorPendenteItem: null,
+  loteMaisAntigo: null,
+};
 
 export const dynamic = 'force-dynamic';
 
@@ -87,34 +126,60 @@ const PRIORIDADE_CLASS: Record<PrioridadeDivergencia, string> = {
 
 export default async function AdminDashboard() {
   const hoje = hojeISO();
-  // Cada loader é envolvido em `comLog` pra que, se um deles estourar,
-  // o server log da Vercel diga EXATAMENTE qual chamada falhou e com
-  // que erro/stack — em vez de só "digest: 3455329531". O re-throw faz
-  // a tela cair pro error.tsx do segmento (retry amigável).
+  // RESILIÊNCIA POR LOADER: a página de dashboard agrega 9 fontes
+  // independentes. Sem isolamento, qualquer falha derruba a tela inteira;
+  // com isolamento, o bloco afetado mostra zeros/empty e os outros
+  // continuam informando o gestor. O AvisoFalhaParcial no topo deixa
+  // claro que parte da informação não pôde ser carregada.
+  //
+  // O erro real fica nos logs da Vercel (event=loader_failed_safe),
+  // com loader + errorMessage + stack + fingerprint do ambiente.
   const rota = '/admin';
   const [
-    snap,
-    divergencias,
-    resumoDiv,
-    resumoControle,
-    controleHoje,
-    divergenciaHoje,
-    divergenciasAbertas,
-    diasAnterioresAbertos,
-    itensTodos,
+    snapR,
+    divergenciasR,
+    resumoDivR,
+    resumoControleR,
+    controleHojeR,
+    divergenciaHojeR,
+    divergenciasAbertasR,
+    diasAnterioresAbertosR,
+    itensTodosR,
   ] = await Promise.all([
-    comLog({ event: 'loader_failed', rota, loader: 'dashboardSnapshot' }, () => dashboardSnapshot()),
-    comLog({ event: 'loader_failed', rota, loader: 'listarDivergenciasComContato' }, () => listarDivergenciasComContato()),
-    comLog({ event: 'loader_failed', rota, loader: 'resumoDivergencias' }, () => resumoDivergencias()),
-    comLog({ event: 'loader_failed', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario()),
-    comLog({ event: 'loader_failed', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(hoje)),
-    comLog({ event: 'loader_failed', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(hoje)),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'dashboardSnapshot' }, () => dashboardSnapshot(), SNAPSHOT_VAZIO),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarDivergenciasComContato' }, () => listarDivergenciasComContato(), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'resumoDivergencias' }, () => resumoDivergencias(), RESUMO_DIV_VAZIO),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario(), null),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(hoje), null),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(hoje), null),
     // Todos os dias com divergência não-resolvida (fechado_com_divergencia
     // ou ainda aberto mostrando discrepância).
-    comLog({ event: 'loader_failed', rota, loader: 'listarDivergenciasDiarias' }, () => listarDivergenciasDiarias()),
-    comLog({ event: 'loader_failed', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(hoje)),
-    comLog({ event: 'loader_failed', rota, loader: 'listarItensTodos' }, () => listarItensTodos()),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarDivergenciasDiarias' }, () => listarDivergenciasDiarias(), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(hoje), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarItensTodos' }, () => listarItensTodos(), []),
   ]);
+  const snap = snapR.valor;
+  const divergencias = divergenciasR.valor;
+  const resumoDiv = resumoDivR.valor;
+  const resumoControle = resumoControleR.valor;
+  const controleHoje = controleHojeR.valor;
+  const divergenciaHoje = divergenciaHojeR.valor;
+  const divergenciasAbertas = divergenciasAbertasR.valor;
+  const diasAnterioresAbertos = diasAnterioresAbertosR.valor;
+  const itensTodos = itensTodosR.valor;
+
+  // Agrupa loaders falhos por seção visual.
+  const secoesIndisponiveis: string[] = [];
+  if (!snapR.ok) secoesIndisponiveis.push('KPIs / impostômetro / últimos lançamentos');
+  if (!divergenciasR.ok || !resumoDivR.ok) secoesIndisponiveis.push('alertas de divergência');
+  if (!resumoControleR.ok || !controleHojeR.ok || !divergenciaHojeR.ok) {
+    secoesIndisponiveis.push('controle diário');
+  }
+  if (!divergenciasAbertasR.ok || !diasAnterioresAbertosR.ok) {
+    secoesIndisponiveis.push('lista de divergências/pendências');
+  }
+  if (!itensTodosR.ok) secoesIndisponiveis.push('nomes de itens');
+
   const nomeItemPorId = new Map(itensTodos.map((i) => [i.id, i.nome]));
   const diaAnteriorPendente = diasAnterioresAbertos[0] ?? null;
   const criticasSemContato = divergencias.filter(
@@ -151,6 +216,8 @@ export default async function AdminDashboard() {
           </p>
         </div>
       </header>
+
+      <AvisoFalhaParcial secoesIndisponiveis={secoesIndisponiveis} />
 
       <section className={styles.impostometro} aria-label="Acumulado de lavanderia">
         <div className={styles.impostometroMes}>

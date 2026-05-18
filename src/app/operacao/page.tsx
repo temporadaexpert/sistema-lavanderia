@@ -16,7 +16,8 @@ import {
   listarLocaisTodos,
 } from '@/app/_lib/data';
 import { listarLotesAbertos } from '@/app/_lib/loteData';
-import { comLog } from '@/app/_lib/serverLog';
+import { comLogSafe } from '@/app/_lib/serverLog';
+import { AvisoFalhaParcial } from '@/app/_components/AvisoFalhaParcial';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -83,36 +84,73 @@ const ESTADO_META: Record<EstadoDia, { titulo: string; descricao: string; classe
 
 export default async function OperacaoHome() {
   const data = hojeISO();
-  // Cada loader em `comLog`: se falhar, server log da Vercel mostra qual
-  // foi e com que erro. Sem isso, todas as falhas viram o mesmo digest
-  // opaco e fica impossível distinguir "Supabase fora" de "tabela X
-  // sem coluna Y".
+  // RESILIÊNCIA POR LOADER: Cada chamada é envolvida em `comLogSafe` com
+  // fallback seguro. Se UMA query do Supabase quebrar (tabela/coluna
+  // faltando, RLS, timeout), o operador ainda consegue clicar nos
+  // botões "Envio do dia" e "Retorno do dia" — só o bloco afetado
+  // mostra "indisponível". O erro REAL fica nos logs da Vercel via
+  // `comLogSafe` (event=loader_failed_safe).
+  //
+  // Os 9 loaders aqui são todos NÃO-críticos: a página é uma central
+  // de navegação; as ações principais (envio/retorno do dia, enviar/
+  // receber lavanderia) são links que renderizam sem dado. Logo, mesmo
+  // se TODOS falharem, o operador ainda navega pra registrar.
   const rota = '/operacao';
   const [
-    resumo,
-    divergencia,
-    controleHoje,
-    disponibilidade,
-    itensTodos,
-    locaisTodos,
-    historico,
-    diasAbertosAnteriores,
-    lotesPendentes,
+    resumoR,
+    divergenciaR,
+    controleHojeR,
+    disponibilidadeR,
+    itensTodosR,
+    locaisTodosR,
+    historicoR,
+    diasAbertosAnterioresR,
+    lotesPendentesR,
   ] = await Promise.all([
-    comLog({ event: 'loader_failed', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario()),
-    comLog({ event: 'loader_failed', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(data)),
-    comLog({ event: 'loader_failed', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(data)),
-    comLog({ event: 'loader_failed', rota, loader: 'disponibilidadeDeTodos' }, () => disponibilidadeDeTodos()),
-    comLog({ event: 'loader_failed', rota, loader: 'listarItensTodos' }, () => listarItensTodos()),
-    comLog({ event: 'loader_failed', rota, loader: 'listarLocaisTodos' }, () => listarLocaisTodos()),
-    comLog({ event: 'loader_failed', rota, loader: 'historicoRecente' }, () => historicoRecente(8)),
-    comLog({ event: 'loader_failed', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(data)),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario(), null),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(data), null),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(data), null),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'disponibilidadeDeTodos' }, () => disponibilidadeDeTodos(), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarItensTodos' }, () => listarItensTodos(), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarLocaisTodos' }, () => listarLocaisTodos(), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'historicoRecente' }, () => historicoRecente(8), []),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(data), []),
     // Lotes abertos = enviados pra lavanderia mas ainda não totalmente
     // recebidos/encerrados. Filtro do service garante: encerradoEm IS NULL
     // E status in (aberto | retorno_parcial | com_divergencia). Status
     // 'concluido' (enviado=retornado, sem precisar fechar) NÃO entra.
-    comLog({ event: 'loader_failed', rota, loader: 'listarLotesAbertos' }, () => listarLotesAbertos()),
+    comLogSafe({ event: 'loader_failed_safe', rota, loader: 'listarLotesAbertos' }, () => listarLotesAbertos(), []),
   ]);
+  const resumo = resumoR.valor;
+  const divergencia = divergenciaR.valor;
+  const controleHoje = controleHojeR.valor;
+  const disponibilidade = disponibilidadeR.valor;
+  const itensTodos = itensTodosR.valor;
+  const locaisTodos = locaisTodosR.valor;
+  const historico = historicoR.valor;
+  const diasAbertosAnteriores = diasAbertosAnterioresR.valor;
+  const lotesPendentes = lotesPendentesR.valor;
+
+  // Mapeia loaders falhos → nome amigável da seção pra o aviso.
+  // Agrupa loaders relacionados ao mesmo bloco (ex.: resumo+controleHoje
+  // = "Resumo do dia") pra não poluir a UI com 9 nomes técnicos.
+  const secoesIndisponiveis: string[] = [];
+  if (!resumoR.ok || !controleHojeR.ok || !divergenciaR.ok) {
+    secoesIndisponiveis.push('resumo do dia');
+  }
+  if (!disponibilidadeR.ok) secoesIndisponiveis.push('disponibilidade');
+  if (!historicoR.ok) secoesIndisponiveis.push('últimos lançamentos');
+  if (!diasAbertosAnterioresR.ok) {
+    secoesIndisponiveis.push('alerta de dia anterior');
+  }
+  if (!lotesPendentesR.ok) {
+    secoesIndisponiveis.push('contagem de lotes pendentes');
+  }
+  // itensTodos e locaisTodos são usados pra resolver nomes — falha aqui
+  // degrada legibilidade mas não impede renderização (caímos pra ids).
+  if (!itensTodosR.ok || !locaisTodosR.ok) {
+    secoesIndisponiveis.push('nomes de itens/locais');
+  }
   // Bloqueio de início de novo dia: se há dia anterior aberto, o
   // operador precisa fechá-lo antes de tocar em qualquer coisa daily.
   // Lavanderia (bloco roxo) NÃO entra no bloqueio — é fluxo paralelo.
@@ -170,6 +208,8 @@ export default async function OperacaoHome() {
       <main className={styles.main}>
         <div className={styles.container}>
           <p className={styles.dataHoje}>{fmtData.format(new Date(`${data}T12:00:00Z`))}</p>
+
+          <AvisoFalhaParcial secoesIndisponiveis={secoesIndisponiveis} />
 
           {bloqueadoPorDiaAnterior && diaPendenteFormatado && diaPendente && (
             <section className={styles.bannerBloqueio} role="alert">

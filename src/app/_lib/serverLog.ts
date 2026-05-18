@@ -42,9 +42,32 @@ export function fingerprintAmbiente(): FingerprintAmbiente {
   };
 }
 
-// Loga um erro com contexto e re-lança. Use em volta de loaders que podem
-// estourar — o re-throw mantém o comportamento do server component (que
-// vira error.tsx); o log dá rastro pra debugar via Vercel.
+function logErro(contexto: ContextoBase, err: unknown): void {
+  const e = err as Error & { code?: string };
+  // JSON.stringify pra manter UMA linha por erro — facilita grep no
+  // painel da Vercel.
+  console.error(
+    JSON.stringify({
+      ...contexto,
+      level: 'error',
+      timestamp: new Date().toISOString(),
+      errorName: e?.name ?? 'Error',
+      errorMessage: e?.message ?? String(err),
+      errorCode: e?.code,
+      // Stack só os 8 primeiros frames — suficiente pra localizar o
+      // ponto sem inflar o log.
+      stack:
+        typeof e?.stack === 'string'
+          ? e.stack.split('\n').slice(0, 8).join(' | ')
+          : undefined,
+      env: fingerprintAmbiente(),
+    }),
+  );
+}
+
+// Loga um erro com contexto e re-lança. Use em volta de loaders CRÍTICOS —
+// loaders que se falharem a página não tem como renderizar nada útil.
+// O re-throw faz cair pro error.tsx do segmento (tela amigável).
 export async function comLog<T>(
   contexto: ContextoBase,
   fn: () => Promise<T>,
@@ -52,26 +75,37 @@ export async function comLog<T>(
   try {
     return await fn();
   } catch (err) {
-    const e = err as Error & { code?: string; cause?: unknown };
-    // JSON.stringify pra manter UMA linha por erro — facilita grep no
-    // painel da Vercel.
-    console.error(
-      JSON.stringify({
-        ...contexto,
-        level: 'error',
-        timestamp: new Date().toISOString(),
-        errorName: e?.name ?? 'Error',
-        errorMessage: e?.message ?? String(err),
-        errorCode: e?.code,
-        // Stack só os 8 primeiros frames — suficiente pra localizar o
-        // ponto sem inflar o log.
-        stack: typeof e?.stack === 'string'
-          ? e.stack.split('\n').slice(0, 8).join(' | ')
-          : undefined,
-        env: fingerprintAmbiente(),
-      }),
-    );
+    logErro(contexto, err);
     throw err;
+  }
+}
+
+// Resultado de um loader resiliente. `ok=true` quando passou; `ok=false`
+// quando falhou (com `fallback` aplicado). UI consulta `ok` pra decidir
+// se mostra dado real ou estado degradado (com aviso "indisponível").
+export type Resiliente<T> =
+  | { readonly ok: true; readonly valor: T }
+  | { readonly ok: false; readonly valor: T; readonly erro: string };
+
+// Loga erro e devolve `fallback`. Use em volta de loaders NÃO-CRÍTICOS —
+// loaders que se falharem a página ainda é utilizável (banner, alerta,
+// stat, badge). Mantém a operação acessível mesmo com 1+ tabelas fora.
+//
+// O retorno carrega `ok` pra UI sinalizar "este bloco está indisponível"
+// — diferente de "está vazio" (ambos seriam visualmente parecidos sem
+// essa distinção, e o operador precisa saber se confia ou não nos zeros).
+export async function comLogSafe<T>(
+  contexto: ContextoBase,
+  fn: () => Promise<T>,
+  fallback: T,
+): Promise<Resiliente<T>> {
+  try {
+    const valor = await fn();
+    return { ok: true, valor };
+  } catch (err) {
+    logErro(contexto, err);
+    const e = err as Error;
+    return { ok: false, valor: fallback, erro: e?.message ?? String(err) };
   }
 }
 
