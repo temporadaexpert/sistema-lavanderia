@@ -94,7 +94,32 @@ async function bootstrap(): Promise<Container> {
   // uma Category pra cada nome distinto e reescrevemos os itens com o id.
   // Roda silenciosamente em todo boot — é O(itens) e não faz I/O quando
   // não há nada a migrar.
-  await migrarCategoriasLegacy(container);
+  //
+  // NÃO-FATAL: se essa chamada falhar (tabela `itens` faltando, RLS, etc.)
+  // NÃO derruba o container. A migração é one-shot pra dados legados
+  // (JSON antigo); em produção Supabase os itens já nascem com
+  // categoriaId. Falhar aqui significava antes que TODOS os loaders
+  // viam reject em cascata — operador sem tela. Agora, logamos e
+  // seguimos: a requisição real vai falhar com erro específico do
+  // loader que tentou, dando rastro mais útil pra debug.
+  try {
+    await migrarCategoriasLegacy(container);
+  } catch (err) {
+    const e = err as Error & { code?: string };
+    console.error(
+      JSON.stringify({
+        event: 'migrar_categorias_legacy_falhou',
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        errorName: e?.name ?? 'Error',
+        errorMessage: e?.message ?? String(err),
+        errorCode: e?.code,
+        nota:
+          'Bootstrap segue mesmo assim. Falha aqui costuma indicar tabela itens ' +
+          'ausente ou RLS bloqueando — corrigir o banco resolve.',
+      }),
+    );
+  }
 
   // Seed de demo: só é executado quando TODAS as condições abaixo batem:
   //   1. NODE_ENV !== 'production'  (proteção primária — em produção, seed
