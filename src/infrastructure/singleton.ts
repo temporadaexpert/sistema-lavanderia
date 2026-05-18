@@ -318,7 +318,45 @@ async function bootstrap(): Promise<Container> {
 export function getContainer(): Promise<Container> {
   const cached = globalStore.__sistemaLavanderia_container__;
   if (cached) return cached;
-  const created = bootstrap();
-  globalStore.__sistemaLavanderia_container__ = created;
-  return created;
+  // Captura falha de bootstrap (env vars ausentes, banco indisponível,
+  // migração faltando) com contexto antes de cachear o reject. Sem isso,
+  // o erro real fica escondido atrás do digest do Next.js.
+  //
+  // INVALIDA o cache em caso de erro: bootstrap falha em runtime (env
+  // vars vêm de cache da Vercel; banco pode estar momentaneamente fora)
+  // e queremos re-tentar no próximo request — não congelar a Lambda num
+  // estado de erro permanente.
+  const tentativa = bootstrap();
+  const monitorada: Promise<Container> = tentativa.catch((err) => {
+    const e = err as Error & { code?: string };
+    console.error(
+      JSON.stringify({
+        event: 'container_bootstrap_failed',
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        errorName: e?.name ?? 'Error',
+        errorMessage: e?.message ?? String(err),
+        errorCode: e?.code,
+        stack:
+          typeof e?.stack === 'string'
+            ? e.stack.split('\n').slice(0, 8).join(' | ')
+            : undefined,
+        env: {
+          NODE_ENV: process.env.NODE_ENV ?? '(unset)',
+          PERSISTENCE_DRIVER: process.env.PERSISTENCE_DRIVER ?? '(unset)',
+          VERCEL_ENV: process.env.VERCEL_ENV ?? '(unset)',
+          VERCEL_REGION: process.env.VERCEL_REGION ?? '(unset)',
+          VERCEL_GIT_COMMIT_SHA: (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 12),
+        },
+      }),
+    );
+    // Limpa o cache só se ainda apontar pra esta tentativa: próximo
+    // request faz outro bootstrap em vez de cachear o reject pra sempre.
+    if (globalStore.__sistemaLavanderia_container__ === monitorada) {
+      globalStore.__sistemaLavanderia_container__ = undefined;
+    }
+    throw err;
+  });
+  globalStore.__sistemaLavanderia_container__ = monitorada;
+  return monitorada;
 }

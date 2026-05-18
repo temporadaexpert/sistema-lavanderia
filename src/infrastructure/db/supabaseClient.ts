@@ -21,6 +21,20 @@ let clientCache: SupabaseClient | null = null;
 function lerEnvObrigatorio(nome: string): string {
   const valor = process.env[nome];
   if (!valor || valor.trim() === '') {
+    // Log estruturado pra Vercel ANTES do throw: o erro propagado vai
+    // virar digest opaco na tela; o log aqui é o que o desenvolvedor
+    // consulta pra entender qual env está faltando.
+    console.error(
+      JSON.stringify({
+        event: 'supabase_env_missing',
+        level: 'error',
+        timestamp: new Date().toISOString(),
+        env_var_faltando: nome,
+        PERSISTENCE_DRIVER: process.env.PERSISTENCE_DRIVER ?? '(unset)',
+        NODE_ENV: process.env.NODE_ENV ?? '(unset)',
+        VERCEL_ENV: process.env.VERCEL_ENV ?? '(unset)',
+      }),
+    );
     throw new Error(
       `Variável de ambiente ${nome} ausente. ` +
         'Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no .env.local ' +

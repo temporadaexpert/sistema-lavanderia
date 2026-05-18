@@ -24,6 +24,7 @@ import type {
   ResumoDivergencias,
 } from '@/application/services/DivergenciaService';
 import type { MovimentacaoTipo } from '@/domain/types/enums';
+import { comLog } from '@/app/_lib/serverLog';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -86,6 +87,11 @@ const PRIORIDADE_CLASS: Record<PrioridadeDivergencia, string> = {
 
 export default async function AdminDashboard() {
   const hoje = hojeISO();
+  // Cada loader é envolvido em `comLog` pra que, se um deles estourar,
+  // o server log da Vercel diga EXATAMENTE qual chamada falhou e com
+  // que erro/stack — em vez de só "digest: 3455329531". O re-throw faz
+  // a tela cair pro error.tsx do segmento (retry amigável).
+  const rota = '/admin';
   const [
     snap,
     divergencias,
@@ -97,17 +103,17 @@ export default async function AdminDashboard() {
     diasAnterioresAbertos,
     itensTodos,
   ] = await Promise.all([
-    dashboardSnapshot(),
-    listarDivergenciasComContato(),
-    resumoDivergencias(),
-    resumoControleDiario(),
-    obterControleDoDia(hoje),
-    divergenciaDoDia(hoje),
+    comLog({ event: 'loader_failed', rota, loader: 'dashboardSnapshot' }, () => dashboardSnapshot()),
+    comLog({ event: 'loader_failed', rota, loader: 'listarDivergenciasComContato' }, () => listarDivergenciasComContato()),
+    comLog({ event: 'loader_failed', rota, loader: 'resumoDivergencias' }, () => resumoDivergencias()),
+    comLog({ event: 'loader_failed', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario()),
+    comLog({ event: 'loader_failed', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(hoje)),
+    comLog({ event: 'loader_failed', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(hoje)),
     // Todos os dias com divergência não-resolvida (fechado_com_divergencia
     // ou ainda aberto mostrando discrepância).
-    listarDivergenciasDiarias(),
-    listarDiasAbertosAnteriores(hoje),
-    listarItensTodos(),
+    comLog({ event: 'loader_failed', rota, loader: 'listarDivergenciasDiarias' }, () => listarDivergenciasDiarias()),
+    comLog({ event: 'loader_failed', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(hoje)),
+    comLog({ event: 'loader_failed', rota, loader: 'listarItensTodos' }, () => listarItensTodos()),
   ]);
   const nomeItemPorId = new Map(itensTodos.map((i) => [i.id, i.nome]));
   const diaAnteriorPendente = diasAnterioresAbertos[0] ?? null;

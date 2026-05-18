@@ -16,6 +16,7 @@ import {
   listarLocaisTodos,
 } from '@/app/_lib/data';
 import { listarLotesAbertos } from '@/app/_lib/loteData';
+import { comLog } from '@/app/_lib/serverLog';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -82,6 +83,11 @@ const ESTADO_META: Record<EstadoDia, { titulo: string; descricao: string; classe
 
 export default async function OperacaoHome() {
   const data = hojeISO();
+  // Cada loader em `comLog`: se falhar, server log da Vercel mostra qual
+  // foi e com que erro. Sem isso, todas as falhas viram o mesmo digest
+  // opaco e fica impossível distinguir "Supabase fora" de "tabela X
+  // sem coluna Y".
+  const rota = '/operacao';
   const [
     resumo,
     divergencia,
@@ -93,19 +99,19 @@ export default async function OperacaoHome() {
     diasAbertosAnteriores,
     lotesPendentes,
   ] = await Promise.all([
-    resumoControleDiario(),
-    divergenciaDoDia(data),
-    obterControleDoDia(data),
-    disponibilidadeDeTodos(),
-    listarItensTodos(),
-    listarLocaisTodos(),
-    historicoRecente(8),
-    listarDiasAbertosAnteriores(data),
+    comLog({ event: 'loader_failed', rota, loader: 'resumoControleDiario' }, () => resumoControleDiario()),
+    comLog({ event: 'loader_failed', rota, loader: 'divergenciaDoDia' }, () => divergenciaDoDia(data)),
+    comLog({ event: 'loader_failed', rota, loader: 'obterControleDoDia' }, () => obterControleDoDia(data)),
+    comLog({ event: 'loader_failed', rota, loader: 'disponibilidadeDeTodos' }, () => disponibilidadeDeTodos()),
+    comLog({ event: 'loader_failed', rota, loader: 'listarItensTodos' }, () => listarItensTodos()),
+    comLog({ event: 'loader_failed', rota, loader: 'listarLocaisTodos' }, () => listarLocaisTodos()),
+    comLog({ event: 'loader_failed', rota, loader: 'historicoRecente' }, () => historicoRecente(8)),
+    comLog({ event: 'loader_failed', rota, loader: 'listarDiasAbertosAnteriores' }, () => listarDiasAbertosAnteriores(data)),
     // Lotes abertos = enviados pra lavanderia mas ainda não totalmente
     // recebidos/encerrados. Filtro do service garante: encerradoEm IS NULL
     // E status in (aberto | retorno_parcial | com_divergencia). Status
     // 'concluido' (enviado=retornado, sem precisar fechar) NÃO entra.
-    listarLotesAbertos(),
+    comLog({ event: 'loader_failed', rota, loader: 'listarLotesAbertos' }, () => listarLotesAbertos()),
   ]);
   // Bloqueio de início de novo dia: se há dia anterior aberto, o
   // operador precisa fechá-lo antes de tocar em qualquer coisa daily.
